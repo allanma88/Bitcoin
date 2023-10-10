@@ -1,0 +1,2 @@
+ROOT="$(dirname "$(dirname "$(readlink -fm "$0")")")"
+protoc --proto_path=$ROOT/src/protocol --go_out=$ROOT/src/protocol --go_opt=paths=source_relative --go-grpc_out=$ROOT/src/protocol --go-grpc_opt=paths=source_relative $ROOT/src/protocol/transaction.proto
