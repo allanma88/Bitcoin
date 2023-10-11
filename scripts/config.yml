@@ -1,1 +1,2 @@
-db: Bitcoin
+datadir: ../data/Bitcoin
+endpoint: localhost:50051

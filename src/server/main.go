@@ -12,14 +12,13 @@ import (
 )
 
 var (
-	PORT   = flag.Int("port", 50051, "The server port")
-	CONFIG = "config.yml"
+	CONFIG = flag.String("config", "config.yml", "the path of config file")
 )
 
 func main() {
 	flag.Parse()
 
-	cfg, err := config.Read(CONFIG)
+	cfg, err := config.Read(*CONFIG)
 	if err != nil {
 		log.Fatalf("read config error: %v", err)
 	}
