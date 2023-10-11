@@ -15,12 +15,12 @@ type ITransactionDB interface {
 }
 
 type TransactionDB struct {
-	*leveldb.DB
+	database *leveldb.DB
 }
 
 func NewTransactionDB(path string) (ITransactionDB, error) {
 	db, err := leveldb.OpenFile(path, nil)
-	return &TransactionDB{DB: db}, err
+	return &TransactionDB{database: db}, err
 }
 
 func (db *TransactionDB) SaveTx(tx *model.Transaction) error {
@@ -30,13 +30,13 @@ func (db *TransactionDB) SaveTx(tx *model.Transaction) error {
 	}
 
 	opt := &opt.WriteOptions{}
-	err = db.DB.Put(tx.Id, bytes, opt)
+	err = db.database.Put(tx.Id, bytes, opt)
 	return err
 }
 
 func (db *TransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
 	opt := &opt.ReadOptions{}
-	bytes, err := db.DB.Get(hash, opt)
+	bytes, err := db.database.Get(hash, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -50,5 +50,5 @@ func (db *TransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
 }
 
 func (db *TransactionDB) Close() error {
-	return db.DB.Close()
+	return db.database.Close()
 }

@@ -1,10 +1,10 @@
 package main
 
 import (
+	"Bitcoin/src/bitcoin/server"
 	"Bitcoin/src/config"
 	"Bitcoin/src/protocol"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 
@@ -19,23 +19,23 @@ var (
 func main() {
 	flag.Parse()
 
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *PORT))
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
 	cfg, err := config.Read(CONFIG)
 	if err != nil {
 		log.Fatalf("read config error: %v", err)
 	}
 
+	listener, err := net.Listen("tcp", cfg.Endpoint)
+	if err != nil {
+		log.Fatalf("failed to listen %v: %v", cfg.Endpoint, err)
+	}
+
 	register := grpc.NewServer()
-	server, err := NewBitcoinServer(cfg.DB)
+	server, err := server.NewBitcoinServer(cfg)
 	if err != nil {
 		log.Fatalf("failed to create server: %v", err)
 	}
 
-	go server.broadcastTx()
+	go server.BroadcastTx()
 
 	protocol.RegisterTransactionServer(register, server)
 	log.Printf("server listening at %v", listener.Addr())

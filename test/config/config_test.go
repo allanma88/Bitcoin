@@ -11,7 +11,7 @@ func Test_Read(t *testing.T) {
 		t.Fatalf("read config error: %v", err)
 	}
 	expect := "Bitcoin"
-	if cfg.DB != expect {
-		t.Fatalf("unexpect config, expect: %v, actual: %v", expect, cfg.DB)
+	if cfg.DataDir != expect {
+		t.Fatalf("unexpect config, expect: %v, actual: %v", expect, cfg.DataDir)
 	}
 }

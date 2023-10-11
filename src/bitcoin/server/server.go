@@ -1,6 +1,7 @@
-package main
+package server
 
 import (
+	"Bitcoin/src/config"
 	"Bitcoin/src/db"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
@@ -11,22 +12,22 @@ import (
 
 type BitcoinServer struct {
 	protocol.TransactionServer
-	*service.TransactionService
-	*service.NodeService
-	pendingTxs []*model.Transaction
-	txQueue    chan *model.Transaction
+	txService   *service.TransactionService
+	nodeService *service.NodeService
+	pendingTxs  []*model.Transaction
+	txQueue     chan *model.Transaction
 }
 
-func NewBitcoinServer(path string) (*BitcoinServer, error) {
-	db, err := db.NewTransactionDB(path)
+func NewBitcoinServer(cfg *config.Config) (*BitcoinServer, error) {
+	db, err := db.NewTransactionDB(cfg.DataDir)
 	if err != nil {
 		return nil, err
 	}
 	server := &BitcoinServer{
-		TransactionService: service.NewTransactionService(db),
-		NodeService:        service.NewNodeService(),
-		pendingTxs:         make([]*model.Transaction, 0, model.PendingTxSize),
-		txQueue:            make(chan *model.Transaction, model.TxQueueSize),
+		txService:   service.NewTransactionService(db),
+		nodeService: service.NewNodeService(cfg),
+		pendingTxs:  make([]*model.Transaction, 0, model.PendingTxSize),
+		txQueue:     make(chan *model.Transaction, model.TxQueueSize),
 	}
 	return server, nil
 }
@@ -38,14 +39,14 @@ func (s *BitcoinServer) ExecuteTx(ctx context.Context, request *protocol.Transac
 	}
 	log.Printf("received transaction: %x", tx.Id)
 
-	err = s.Validate(tx)
+	err = s.txService.Validate(tx)
 	if err != nil {
 		log.Printf("validate transaction %x failed: %v", tx.Id, err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
 	log.Printf("validated transaction: %x", tx.Id)
 
-	err = s.SaveTx(tx)
+	err = s.txService.SaveTx(tx)
 	if err != nil {
 		log.Printf("save transaction %x failed: %v", tx.Id, err)
 		return &protocol.TransactionReply{Result: false}, err
@@ -54,13 +55,13 @@ func (s *BitcoinServer) ExecuteTx(ctx context.Context, request *protocol.Transac
 
 	s.pendingTxs = append(s.pendingTxs, tx)
 	s.txQueue <- tx //TODO: async?
-	s.NodeService.AddNodes(request.Nodes)
+	s.nodeService.AddNodes(request.Nodes)
 
 	return &protocol.TransactionReply{Result: true}, nil
 }
 
-func (s *BitcoinServer) broadcastTx() {
+func (s *BitcoinServer) BroadcastTx() {
 	for tx := range s.txQueue {
-		s.NodeService.SendTx(tx)
+		s.nodeService.SendTx(tx)
 	}
 }
