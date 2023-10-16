@@ -54,8 +54,17 @@ func (s *BitcoinServer) ExecuteTx(ctx context.Context, request *protocol.Transac
 	log.Printf("saved transaction: %x", tx.Id)
 
 	s.pendingTxs = append(s.pendingTxs, tx)
-	s.txQueue <- tx //TODO: async?
-	s.nodeService.AddNodes(request.Nodes)
+	log.Printf("append to pending txs: %x", tx.Id)
+
+	go func() { s.txQueue <- tx }()
+	log.Printf("broadcast the transaction: %x", tx.Id)
+
+	err = s.nodeService.AddAddrs(request.Nodes)
+	if err != nil {
+		log.Printf("add nodes failed: %v", err)
+		return &protocol.TransactionReply{Result: false}, err
+	}
+	log.Printf("added to the node list: %x", tx.Id)
 
 	return &protocol.TransactionReply{Result: true}, nil
 }
