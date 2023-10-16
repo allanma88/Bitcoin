@@ -82,24 +82,29 @@ func (service *NodeService) SendTx(tx *model.Transaction) {
 
 	selectedAddrs := RandomPick(service.cfg.Endpoint, addrs, model.MaxBroadcastNodes)
 	deleted := make([]string, 0, len(nodes))
+	wg := &sync.WaitGroup{}
 
-	for addr, node := range nodes {
+	for _, node := range nodes {
 		req := model.TransactionTo(tx, selectedAddrs)
-
-		_, err := node.Client.SendTx(req)
-		if err != nil {
-			log.Printf("sent transaction failed: %v", err)
-			node.failed++
-			if node.failed >= model.MaxFailedCount {
-				deleted = append(deleted, addr)
+		wg.Add(1)
+		go func(n *Node) {
+			_, err := n.Client.SendTx(req) //TODO: parallel send tx
+			if err != nil {
+				log.Printf("sent transaction failed: %v", err)
+				n.failed++
+				if n.failed >= model.MaxFailedCount {
+					deleted = append(deleted, n.Addr)
+				}
+			} else {
+				if n.failed > 0 {
+					n.failed--
+				}
 			}
-		} else {
-			if node.failed > 0 {
-				node.failed--
-			}
-		}
-		// log.Printf("sent transaction result: %v", reply.Result)
+			wg.Done()
+			// log.Printf("sent transaction result: %v", reply.Result)
+		}(node)
 	}
+	wg.Wait()
 
 	service.lock.Lock()
 	for _, node := range deleted {
