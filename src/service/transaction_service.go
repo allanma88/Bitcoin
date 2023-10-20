@@ -3,6 +3,7 @@ package service
 import (
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/db"
+	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
 	"bytes"
 	"time"
@@ -17,6 +18,7 @@ func NewTransactionService(db db.ITransactionDB) *TransactionService {
 	return service
 }
 
+// TODO: validate the coin whether spent or not
 func (service *TransactionService) Validate(tx *model.Transaction) error {
 	hash, err := validateHash(tx)
 	if err != nil {
@@ -25,11 +27,11 @@ func (service *TransactionService) Validate(tx *model.Transaction) error {
 
 	existTx, err := service.GetTx(hash)
 	if existTx != nil && err == nil {
-		return model.ErrTxExist
+		return errors.ErrTxExist
 	}
 
 	if tx.Timestamp.AsTime().Compare(time.Now().Add(2*time.Hour)) >= 0 {
-		return model.ErrTxTooEarly
+		return errors.ErrTxTooEarly
 	}
 
 	var totalInput uint64
@@ -45,7 +47,7 @@ func (service *TransactionService) Validate(tx *model.Transaction) error {
 	}
 
 	if totalInput < totalOutput {
-		return model.ErrTxInsufficientCoins
+		return errors.ErrTxInsufficientCoins
 	}
 
 	return nil
@@ -54,10 +56,10 @@ func (service *TransactionService) Validate(tx *model.Transaction) error {
 func validateHash(tx *model.Transaction) ([]byte, error) {
 	hash, err := tx.ComputeHash()
 	if err != nil {
-		return nil, model.ErrTxHashInvalid
+		return nil, errors.ErrTxHashInvalid
 	}
 	if !bytes.Equal(hash, tx.Id) {
-		return nil, model.ErrTxHashInvalid
+		return nil, errors.ErrTxHashInvalid
 	}
 	return hash, nil
 }
@@ -65,7 +67,7 @@ func validateHash(tx *model.Transaction) ([]byte, error) {
 func (service *TransactionService) validateInputs(tx *model.Transaction) (uint64, error) {
 	//TODO: empty inputs should fail
 	if len(tx.Ins) != int(tx.InLen) {
-		return 0, model.ErrInLenMismatch
+		return 0, errors.ErrInLenMismatch
 	}
 	var total uint64 = 0
 	for _, input := range tx.Ins {
@@ -81,18 +83,18 @@ func (service *TransactionService) validateInputs(tx *model.Transaction) (uint64
 func (service *TransactionService) validateInput(input *model.In, tx *model.Transaction) (uint64, error) {
 	prevTx, err := service.GetTx(input.PrevHash)
 	if err != nil {
-		return 0, model.ErrTxNotFound
+		return 0, errors.ErrTxNotFound
 	}
 	if input.Index >= uint32(len(prevTx.Outs)) {
-		return 0, model.ErrInLenOutOfIndex
+		return 0, errors.ErrInLenOutOfIndex
 	}
 	if prevTx.Timestamp.AsTime().Compare(tx.Timestamp.AsTime()) >= 0 {
-		return 0, model.ErrTxTooLate
+		return 0, errors.ErrTxTooLate
 	}
 	prevOutput := prevTx.Outs[input.Index]
 	valid, err := cryptography.Verify(prevOutput.Pubkey, prevTx.Id, input.Signature)
 	if !valid || err != nil {
-		return 0, model.ErrTxSigInvalid
+		return 0, errors.ErrTxSigInvalid
 	}
 	return prevOutput.Value, nil
 }
@@ -100,7 +102,7 @@ func (service *TransactionService) validateInput(input *model.In, tx *model.Tran
 func (service *TransactionService) validateOutputs(tx *model.Transaction) (uint64, error) {
 	//TODO: empty outputs should fail
 	if len(tx.Outs) != int(tx.OutLen) {
-		return 0, model.ErrOutLenMismatch
+		return 0, errors.ErrOutLenMismatch
 	}
 	var total uint64 = 0
 	for _, output := range tx.Outs {

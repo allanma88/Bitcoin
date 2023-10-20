@@ -3,11 +3,13 @@ package service
 import (
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/db"
+	bcerrors "Bitcoin/src/errors"
 	"Bitcoin/src/model"
 	"Bitcoin/src/service"
 	"Bitcoin/test"
 	"bytes"
 	"errors"
+
 	"testing"
 	"time"
 
@@ -27,8 +29,8 @@ func Test_Validate_Hash_Mismatch(t *testing.T) {
 
 	service := &service.TransactionService{}
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrTxHashInvalid) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", model.ErrTxHashInvalid, err)
+	if !errors.Is(err, bcerrors.ErrTxHashInvalid) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxHashInvalid, err)
 	}
 }
 
@@ -41,8 +43,8 @@ func Test_Validate_Tx_Exists(t *testing.T) {
 	txdb := newTransactionDB(tx)
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrTxExist) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", model.ErrTxExist, err)
+	if !errors.Is(err, bcerrors.ErrTxExist) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxExist, err)
 	}
 }
 
@@ -56,8 +58,8 @@ func Test_Validate_Time_Too_Early(t *testing.T) {
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrTxTooEarly) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", model.ErrTxTooEarly, err)
+	if !errors.Is(err, bcerrors.ErrTxTooEarly) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxTooEarly, err)
 	}
 }
 
@@ -71,8 +73,8 @@ func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrInLenMismatch) {
-		t.Fatalf("transaction validate failed, expect: %s, actual: %s", model.ErrInLenMismatch, err)
+	if !errors.Is(err, bcerrors.ErrInLenMismatch) {
+		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrInLenMismatch, err)
 	}
 }
 
@@ -101,8 +103,8 @@ func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrTxNotFound) {
-		t.Fatalf("transaction validate failed, expect: %s, actual: %s", model.ErrTxNotFound, err)
+	if !errors.Is(err, bcerrors.ErrTxNotFound) {
+		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
 	}
 }
 
@@ -126,8 +128,8 @@ func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrTxTooLate) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", model.ErrTxTooLate, err)
+	if !errors.Is(err, bcerrors.ErrTxTooLate) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxTooLate, err)
 	}
 }
 
@@ -151,8 +153,8 @@ func Test_Validate_Input_Time_Too_Late(t *testing.T) {
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrTxTooLate) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", model.ErrTxTooLate, err)
+	if !errors.Is(err, bcerrors.ErrTxTooLate) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxTooLate, err)
 	}
 }
 
@@ -175,8 +177,8 @@ func Test_Validate_In_Sig_Mismatch(t *testing.T) {
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrTxSigInvalid) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", model.ErrTxSigInvalid, err)
+	if !errors.Is(err, bcerrors.ErrTxSigInvalid) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxSigInvalid, err)
 	}
 }
 
@@ -193,8 +195,8 @@ func Test_Validate_Outs_Len_Not_Match(t *testing.T) {
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrOutLenMismatch) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", model.ErrOutLenMismatch, err)
+	if !errors.Is(err, bcerrors.ErrOutLenMismatch) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrOutLenMismatch, err)
 	}
 }
 
@@ -218,8 +220,8 @@ func Test_Validate_Output_Value_Too_Large(t *testing.T) {
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, model.ErrTxInsufficientCoins) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", model.ErrTxInsufficientCoins, err)
+	if !errors.Is(err, bcerrors.ErrTxInsufficientCoins) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxInsufficientCoins, err)
 	}
 }
 
@@ -445,7 +447,7 @@ func (db *TestTransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
 	if ok {
 		return tx, nil
 	} else {
-		return nil, model.ErrTxNotFound
+		return nil, bcerrors.ErrTxNotFound
 	}
 }
 

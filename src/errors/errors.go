@@ -1,4 +1,4 @@
-package model
+package errors
 
 import "errors"
 
@@ -13,4 +13,5 @@ var (
 	ErrInLenMismatch       = errors.New("transaction input length mismatch")
 	ErrInLenOutOfIndex     = errors.New("transaction input out of index of prev transaction outputs")
 	ErrOutLenMismatch      = errors.New("transaction output length mismatch")
+	ErrMerkleInvalid       = errors.New("invalid merkle tree")
 )

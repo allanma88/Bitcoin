@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"log"
 	"reflect"
 )
 
@@ -16,7 +15,7 @@ func Hash(e any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("%s", str)
+	// log.Printf("%s", str)
 
 	sha := sha256.New()
 	sha.Write([]byte(str))
