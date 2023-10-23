@@ -2,7 +2,7 @@ package service
 
 import (
 	"Bitcoin/src/cryptography"
-	"Bitcoin/src/db"
+	"Bitcoin/src/database"
 	bcerrors "Bitcoin/src/errors"
 	"Bitcoin/src/model"
 	"Bitcoin/src/service"
@@ -429,7 +429,7 @@ type TestTransactionDB struct {
 	Transactions map[string]*model.Transaction
 }
 
-func newTransactionDB(txs ...*model.Transaction) db.ITransactionDB {
+func newTransactionDB(txs ...*model.Transaction) database.ITransactionDB {
 	transactions := make(map[string]*model.Transaction)
 	for _, tx := range txs {
 		transactions[string(tx.Id)] = tx

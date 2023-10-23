@@ -2,12 +2,14 @@ package server
 
 import (
 	"Bitcoin/src/config"
-	"Bitcoin/src/db"
+	"Bitcoin/src/database"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"Bitcoin/src/service"
 	"context"
 	"log"
+
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type BitcoinServer struct {
@@ -19,12 +21,14 @@ type BitcoinServer struct {
 }
 
 func NewBitcoinServer(cfg *config.Config) (*BitcoinServer, error) {
-	db, err := db.NewTransactionDB(cfg.DataDir)
+	db, err := leveldb.OpenFile(cfg.DataDir, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	txdb := database.NewTransactionDB(db)
 	server := &BitcoinServer{
-		txService:   service.NewTransactionService(db),
+		txService:   service.NewTransactionService(txdb),
 		nodeService: service.NewNodeService(cfg),
 		pendingTxs:  make([]*model.Transaction, 0, model.PendingTxSize),
 		txQueue:     make(chan *model.Transaction, model.TxQueueSize),

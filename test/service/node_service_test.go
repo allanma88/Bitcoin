@@ -245,13 +245,13 @@ func Test_Add_Invalid_Addrs(t *testing.T) {
 type TxChannel chan *protocol.TransactionReq
 type MakeClient func(TxChannel) client.IBitcoinClient
 
-func generateNodes(n, start int, channels map[string]TxChannel, makeclient MakeClient) []*service.Node {
-	nodes := make([]*service.Node, n)
+func generateNodes(n, start int, channels map[string]TxChannel, makeclient MakeClient) []*model.Node {
+	nodes := make([]*model.Node, n)
 
 	for i := 0; i < n; i++ {
 		addr := fmt.Sprintf("localhost:%d", start+i)
 		channels[addr] = make(chan *protocol.TransactionReq, 1)
-		nodes[i] = &service.Node{
+		nodes[i] = &model.Node{
 			Addr:   addr,
 			Client: makeclient(channels[addr]),
 		}

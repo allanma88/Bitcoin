@@ -1,12 +1,13 @@
 package db
 
 import (
-	"Bitcoin/src/db"
+	"Bitcoin/src/database"
 	"Bitcoin/src/model"
 	"bytes"
 	"os"
 	"testing"
 
+	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -22,11 +23,12 @@ func Test_CRUD(t *testing.T) {
 		t.Fatalf("new transaction error: %s", err)
 	}
 
-	txdb, err := db.NewTransactionDB(DBPath)
+	db, err := leveldb.OpenFile(DBPath, nil)
 	if err != nil {
-		t.Fatalf("new transaction db error: %s", err)
+		t.Fatalf("open %s error: %s", DBPath, err)
 	}
 
+	txdb := database.NewTransactionDB(db)
 	err = txdb.SaveTx(tx)
 	if err != nil {
 		t.Errorf("save transaction error: %s", err)
@@ -72,7 +74,7 @@ func newTransaction(ins []*model.In, outs []*model.Out) (*model.Transaction, err
 	return tx, nil
 }
 
-func cleanUp(txdb db.ITransactionDB) {
+func cleanUp(txdb database.ITransactionDB) {
 	txdb.Close()
 	os.RemoveAll(DBPath)
 }

@@ -13,27 +13,21 @@ import (
 
 //TODO: maybe we can use more complex policy to remove inactive nodes
 
-type Node struct {
-	Addr   string
-	Client client.IBitcoinClient
-	failed int
-}
-
 type NodeService struct {
 	lock  sync.RWMutex
-	nodes map[string]*Node
+	nodes map[string]*model.Node
 	cfg   *config.Config
 }
 
 func NewNodeService(cfg *config.Config) *NodeService {
 	service := &NodeService{
 		lock:  sync.RWMutex{},
-		nodes: make(map[string]*Node),
+		nodes: make(map[string]*model.Node),
 		cfg:   cfg,
 	}
 	if cfg.Bootstraps != nil {
 		for _, node := range cfg.Bootstraps {
-			service.nodes[node] = &Node{Addr: node}
+			service.nodes[node] = &model.Node{Addr: node}
 		}
 	}
 	return service
@@ -48,7 +42,7 @@ func (service *NodeService) AddAddrs(addrs []string) error {
 	return service.AddNodes(nodes...)
 }
 
-func (service *NodeService) AddNodes(nodes ...*Node) error {
+func (service *NodeService) AddNodes(nodes ...*model.Node) error {
 	service.lock.Lock()
 	defer service.lock.Unlock()
 
@@ -65,12 +59,12 @@ func (service *NodeService) AddNodes(nodes ...*Node) error {
 	return nil
 }
 
-func (service *NodeService) GetNode(addr string) *Node {
+func (service *NodeService) GetNode(addr string) *model.Node {
 	return service.nodes[addr]
 }
 
 func (service *NodeService) SendTx(tx *model.Transaction) {
-	nodes := make(map[string]*Node)
+	nodes := make(map[string]*model.Node)
 	addrs := make([]string, 0, len(nodes))
 
 	service.lock.RLock()
@@ -87,17 +81,17 @@ func (service *NodeService) SendTx(tx *model.Transaction) {
 	for _, node := range nodes {
 		req := model.TransactionTo(tx, selectedAddrs)
 		wg.Add(1)
-		go func(n *Node) {
+		go func(n *model.Node) {
 			_, err := n.Client.SendTx(req) //TODO: parallel send tx
 			if err != nil {
 				log.Printf("sent transaction failed: %v", err)
-				n.failed++
-				if n.failed >= model.MaxFailedCount {
+				n.Failed++
+				if n.Failed >= model.MaxFailedCount {
 					deleted = append(deleted, n.Addr)
 				}
 			} else {
-				if n.failed > 0 {
-					n.failed--
+				if n.Failed > 0 {
+					n.Failed--
 				}
 			}
 			wg.Done()
@@ -126,8 +120,8 @@ func RandomPick(endpoint string, addrs []string, n int) []string {
 	return selects
 }
 
-func toNodes(addrs []string) ([]*Node, error) {
-	nodes := make([]*Node, len(addrs))
+func toNodes(addrs []string) ([]*model.Node, error) {
+	nodes := make([]*model.Node, len(addrs))
 
 	for i, addr := range addrs {
 		_, err := url.Parse(addr)
@@ -136,7 +130,7 @@ func toNodes(addrs []string) ([]*Node, error) {
 			return nil, fmt.Errorf("the format of node %s error: %s", addr, err)
 		}
 
-		node := &Node{
+		node := &model.Node{
 			Addr:   addr,
 			Client: client.NewBitcoinClient(addr),
 		}

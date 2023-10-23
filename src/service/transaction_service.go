@@ -2,7 +2,7 @@ package service
 
 import (
 	"Bitcoin/src/cryptography"
-	"Bitcoin/src/db"
+	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
 	"bytes"
@@ -10,10 +10,10 @@ import (
 )
 
 type TransactionService struct {
-	db.ITransactionDB
+	database.ITransactionDB
 }
 
-func NewTransactionService(db db.ITransactionDB) *TransactionService {
+func NewTransactionService(db database.ITransactionDB) *TransactionService {
 	service := &TransactionService{ITransactionDB: db}
 	return service
 }
