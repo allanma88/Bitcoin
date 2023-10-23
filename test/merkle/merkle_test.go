@@ -5,13 +5,12 @@ import (
 	"Bitcoin/src/merkle"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"testing"
 )
 
-func Test_Merkle_Marshal_Single_Succeed(t *testing.T) {
-	n := rand.Intn(100) + 10
+func Test_Merkle_Marshal_Succeed(t *testing.T) {
+	n := 5
 	vals := make([]string, n)
 	for i := 0; i < n; i++ {
 		vals[i] = fmt.Sprintf("Hello%d", i)
@@ -28,43 +27,45 @@ func Test_Merkle_Marshal_Single_Succeed(t *testing.T) {
 	}
 
 	t.Logf("json: %s", string(data))
-}
-
-func Test_Merkle_Marshal_Batch_Succeed(t *testing.T) {
-	for n := 2; n < 50; n++ {
-		vals := make([]string, n)
-		for i := 0; i < n; i++ {
-			vals[i] = fmt.Sprintf("Hello%d", i)
-		}
-
-		tree, err := merkle.BuildTree[string](vals)
-		if err != nil {
-			t.Fatalf("build merkle tree error: %s", err)
-		}
-
-		_, err = json.Marshal(tree)
-		if err != nil {
-			t.Fatalf("hash merkle tree error: %s", err)
-		}
-	}
-}
-
-func Test_Merkle_Unmarshal_Single_Succeed(t *testing.T) {
-	path := "merkle_success.json"
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s error: %s", path, err)
-	}
 
 	var newtree merkle.MerkleTree
 	err = json.Unmarshal(data, &newtree)
 	if err != nil {
 		t.Fatalf("unmarshal merkle tree error: %s", err)
 	}
+
 	print(&newtree, t)
 }
 
-func Test_Merkle_Unmarshal_Batch_Succeed(t *testing.T) {
+func Test_Merkle_Marshal_Duplicate_Failed(t *testing.T) {
+	n := 7
+	vals := make([]string, n)
+	for i := 0; i < n; i++ {
+		vals[i] = "Hello"
+	}
+
+	tree, err := merkle.BuildTree[string](vals)
+	if err != nil {
+		t.Fatalf("build merkle tree error: %s", err)
+	}
+
+	data, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatalf("hash merkle tree error: %s", err)
+	}
+
+	t.Logf("json: %s", string(data))
+
+	var newtree merkle.MerkleTree
+	err = json.Unmarshal(data, &newtree)
+
+	nodeUnmarshalError := err.(merkle.NodeUnmarshalError)
+	if nodeUnmarshalError.Err != merkle.ErrMtDuplicateHash {
+		t.Fatalf("expect error: %s, actual err: %v", merkle.ErrMtDuplicateHash, err)
+	}
+}
+
+func Test_Merkle_Marshal_Batch_Succeed(t *testing.T) {
 	for n := 2; n < 50; n++ {
 		vals := make([]string, n)
 		for i := 0; i < n; i++ {
@@ -86,7 +87,6 @@ func Test_Merkle_Unmarshal_Batch_Succeed(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unmarshal merkle tree error: %s", err)
 		}
-		// print(&newtree, t)
 	}
 }
 
@@ -109,12 +109,12 @@ func Test_Merkle_Unmarshal_Failed(t *testing.T) {
 
 		rowUnmarshalError, ok := err.(merkle.RowUnmarshalError)
 		if ok && rowUnmarshalError.Err != expect {
-			t.Fatalf("unmarshal merkle tree, expect: %v, actual: %v", expect, rowUnmarshalError)
+			t.Fatalf("%s unmarshal merkle tree, expect: %v, actual: %v", file, expect, rowUnmarshalError)
 		}
 
 		nodeUnmarshalError, ok := err.(merkle.NodeUnmarshalError)
 		if ok && nodeUnmarshalError.Err != expect {
-			t.Fatalf("unmarshal merkle tree, expect: %v, actual: %v", expect, nodeUnmarshalError)
+			t.Fatalf("%s unmarshal merkle tree, expect: %v, actual: %v", file, expect, nodeUnmarshalError)
 		}
 	}
 }
@@ -146,6 +146,12 @@ func Test_Merkle_Validate_Success(t *testing.T) {
 		if err != nil {
 			t.Fatalf("build merkle tree error: %s", err)
 		}
+
+		data, err := json.Marshal(tree)
+		if err != nil {
+			t.Fatalf("marshal merkle tree error: %s", err)
+		}
+		t.Logf("json: %s", string(data))
 
 		valid, err := tree.Validate()
 		if err != nil {
@@ -192,7 +198,7 @@ func Test_Merkle_Validate_Success_From_Json(t *testing.T) {
 		t.Fatalf("validate merkle tree error: %s", err)
 	}
 	if !valid {
-		t.Fatalf("validate merkle tree should success, but failed")
+		t.Fatalf("the valid merkle tree validate failed")
 	}
 }
 
@@ -217,29 +223,43 @@ func Test_Merkle_Validate_Fail_From_Json(t *testing.T) {
 	}
 }
 
-func print(tree *merkle.MerkleTree, t *testing.T) {
-	nodes := tree.Table[0]
+func Test_Merkle_Has(t *testing.T) {
+	for n := 2; n < 100; n++ {
+		t.Logf("n = %d", n)
 
-	for len(nodes) > 1 {
-		parents := make([]*merkle.MerkleTreeNode, 0, len(nodes)/2)
-		for i := 0; i+1 < len(nodes); i += 2 {
-			t.Logf("%x", nodes[i].Hash)
-			t.Logf("%x", nodes[i+1].Hash)
+		vals := make([]string, n)
+		hashs := make([][]byte, n)
+		for i := 0; i < n; i++ {
+			vals[i] = fmt.Sprintf("Hello%d", i)
+			hash, err := cryptography.Hash(vals[i])
+			if err != nil {
+				t.Fatalf("hash %s error: %s", vals[i], err)
+			}
+			hashs[i] = hash
+		}
 
-			if nodes[i].Parent != nil {
-				parents = append(parents, nodes[i].Parent)
-			} else if nodes[i+1].Parent != nil {
-				parents = append(parents, nodes[i+1].Parent)
+		tree, err := merkle.BuildTree[string](vals)
+		if err != nil {
+			t.Fatalf("build merkle tree error: %s", err)
+		}
+
+		for i, hash := range hashs {
+			has, err := tree.Has(hash)
+			if err != nil {
+				t.Fatalf("search merkle tree error: %s", err)
+			}
+			if !has {
+				t.Fatalf("didn't find the hash %x of %s in the merkle tree", hash, vals[i])
 			}
 		}
+	}
+}
 
-		if len(nodes)%2 != 0 {
-			parents = append(parents, nodes[len(nodes)-1])
+func print(tree *merkle.MerkleTree, t *testing.T) {
+	for r := 0; r < len(tree.Table); r++ {
+		for c := 0; c < len(tree.Table[r]); c++ {
+			t.Logf("%x", tree.Table[r][c].Hash)
 		}
-
-		nodes = parents
 		t.Log("\n")
 	}
-
-	t.Logf("%x\n", nodes[0].Hash)
 }

@@ -15,6 +15,7 @@ const (
 	ErrMtFewParentHash = "too few parent hash"
 	ErrMtDuplicateHash = "duplicate Hash"
 	ErrMtNoParentHash  = "no parent Hash"
+	ErrMtNoSiblingHash = "no sibling Hash"
 )
 
 type RowUnmarshalError struct {
@@ -27,13 +28,14 @@ func (err RowUnmarshalError) Error() string {
 }
 
 type NodeUnmarshalError struct {
-	Err        string
-	Hash       []byte
-	ParentHash []byte
+	Err         string
+	Hash        []byte
+	ParentHash  []byte
+	SiblingHash []byte
 }
 
 func (err NodeUnmarshalError) Error() string {
-	return fmt.Sprintf("%v, hash: %x, parent: %x", err.Err, err.Hash, err.ParentHash)
+	return fmt.Sprintf("%v, hash: %x, parent: %x, sibling: %x", err.Err, err.Hash, err.ParentHash, err.SiblingHash)
 }
 
 type MerkleTree struct {
@@ -53,26 +55,31 @@ func (tree *MerkleTree) UnmarshalJSON(data []byte) error {
 }
 
 type MerkleTreeNode struct {
-	Hash       []byte          `json:"hash,omitempty"`
-	ParentHash []byte          `json:"parent,omitempty"`
-	Parent     *MerkleTreeNode `json:"-"`
+	Hash        []byte          `json:"hash,omitempty"`
+	ParentHash  []byte          `json:"parent,omitempty"`
+	SiblingHash []byte          `json:"sibling,omitempty"`
+	Parent      *MerkleTreeNode `json:"-"`
+	Sibling     *MerkleTreeNode `json:"-"`
 }
 
 func (node *MerkleTreeNode) MarshalJSON() ([]byte, error) {
 	var s = struct {
-		Hash       string `json:"hash,omitempty"`
-		ParentHash string `json:"parent,omitempty"`
+		Hash        string `json:"hash,omitempty"`
+		ParentHash  string `json:"parent,omitempty"`
+		SiblingHash string `json:"sibling,omitempty"`
 	}{
-		Hash:       hex.EncodeToString(node.Hash),
-		ParentHash: hex.EncodeToString(node.ParentHash),
+		Hash:        hex.EncodeToString(node.Hash),
+		ParentHash:  hex.EncodeToString(node.ParentHash),
+		SiblingHash: hex.EncodeToString(node.SiblingHash),
 	}
 	return json.Marshal(s)
 }
 
 func (node *MerkleTreeNode) UnmarshalJSON(data []byte) error {
 	var s struct {
-		Hash       string `json:"hash,omitempty"`
-		ParentHash string `json:"parent,omitempty"`
+		Hash        string `json:"hash,omitempty"`
+		ParentHash  string `json:"parent,omitempty"`
+		SiblingHash string `json:"sibling,omitempty"`
 	}
 
 	err := json.Unmarshal(data, &s)
@@ -90,7 +97,22 @@ func (node *MerkleTreeNode) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	node.SiblingHash, err = hex.DecodeString(s.SiblingHash)
+	if err != nil {
+		return err
+	}
+
 	return err
+}
+
+func (node *MerkleTreeNode) SetParent(parent *MerkleTreeNode) {
+	node.ParentHash = parent.Hash
+	node.Parent = parent
+}
+
+func (node *MerkleTreeNode) SetSibling(sibling *MerkleTreeNode) {
+	node.SiblingHash = sibling.Hash
+	node.Sibling = sibling
 }
 
 func BuildTree[T any](vals []T) (*MerkleTree, error) {
@@ -119,8 +141,10 @@ func BuildTree[T any](vals []T) (*MerkleTree, error) {
 			}
 
 			parent := &MerkleTreeNode{Hash: hash}
-			nodes[i].ParentHash, nodes[i+1].ParentHash = hash, hash
-			nodes[i].Parent, nodes[i+1].Parent = parent, parent
+			nodes[i].SetParent(parent)
+			nodes[i+1].SetParent(parent)
+			nodes[i].SetSibling(nodes[i+1])
+			nodes[i+1].SetSibling(nodes[i])
 			parents[i/2], row[i/2] = parent, parent
 		}
 
@@ -138,106 +162,14 @@ func BuildTree[T any](vals []T) (*MerkleTree, error) {
 }
 
 func (tree *MerkleTree) Validate() (bool, error) {
-	return validate(tree.Table[0]...)
-}
+	nodes := tree.Table[0]
 
-func (tree *MerkleTree) Has(hash []byte) (bool, error) {
-	if len(tree.Table) == 0 {
-		return false, nil
-	}
-
-	var i int
-	for i = 0; i < len(tree.Table[0]); i++ {
-		if bytes.Equal(tree.Table[0][i].Hash, hash) {
-			break
-		}
-	}
-
-	if i == len(tree.Table[0]) {
-		return false, nil
-	}
-
-	nodes := make([]*MerkleTreeNode, 0, 3)
-
-	if i%2 == 0 {
-		if i+1 > len(tree.Table[0]) {
-			nodes = append(nodes, tree.Table[0][i-2])
-			nodes = append(nodes, tree.Table[0][i-1])
-			nodes = append(nodes, tree.Table[0][i])
-		} else {
-			nodes = append(nodes, tree.Table[0][i])
-			nodes = append(nodes, tree.Table[0][i+1])
-		}
-	} else {
-		nodes = append(nodes, tree.Table[0][i-1])
-		nodes = append(nodes, tree.Table[0][i])
-	}
-
-	return validate(nodes...)
-}
-
-func rebuild(tree *MerkleTree) error {
-	if len(tree.Table) <= 1 {
-		return RowUnmarshalError{Err: ErrMtFewRows}
-	}
-
-	hashmap := make(map[string]string)
-	parents := make(map[string]*MerkleTreeNode)
-
-	i, remainder := 0, 0
-	for i = 1; i < len(tree.Table); i++ {
-		if (len(tree.Table[i-1])+remainder)/2 != len(tree.Table[i]) {
-			return RowUnmarshalError{Err: ErrMtNodeSize, Row: i}
-		}
-
-		for j := 0; j < len(tree.Table[i]); j++ {
-			n := tree.Table[i][j]
-			parents[string(n.Hash)] = n
-		}
-		remainder = (len(tree.Table[i-1]) + remainder) % 2
-	}
-
-	for i = 0; i < len(tree.Table)-1; i++ {
-		parentHashs := make(map[string]string)
-		for j := 0; j < len(tree.Table[i]); j++ {
-			n := tree.Table[i][j]
-
-			_, hasHash := hashmap[string(n.Hash)]
-			if hasHash {
-				return NodeUnmarshalError{Err: ErrMtDuplicateHash, Hash: n.Hash}
-			}
-
-			parent, hasParent := parents[string(n.ParentHash)]
-			if !hasParent {
-				return NodeUnmarshalError{Err: ErrMtNoParentHash, Hash: n.Hash, ParentHash: n.ParentHash}
-			}
-
-			parentHashs[string(parent.Hash)] = string(parent.Hash)
-
-			n.Parent = parent
-		}
-
-		if len(parentHashs) < len(tree.Table[i+1]) {
-			return RowUnmarshalError{Err: ErrMtFewParentHash, Row: i}
-		}
-	}
-
-	n := tree.Table[i][0]
-	_, hasHash := hashmap[string(n.Hash)]
-	if hasHash {
-		return NodeUnmarshalError{Err: ErrMtDuplicateHash, Hash: n.Hash}
-	}
-
-	return nil
-}
-
-func validate(nodes ...*MerkleTreeNode) (bool, error) {
 	for len(nodes) > 1 {
 		parents := make([]*MerkleTreeNode, len(nodes)/2+len(nodes)%2)
 
 		for i := 0; i+1 < len(nodes); i += 2 {
 			if !bytes.Equal(nodes[i].Parent.Hash, nodes[i+1].Parent.Hash) {
-				log.Printf("parent of nodes %d and nodes %d are not same", i, i+1)
+				log.Printf("parent of nodes %d and nodes %d are not same, total %d", i, i+1, len(nodes))
 				return false, nil
 			}
 
@@ -264,10 +196,116 @@ func validate(nodes ...*MerkleTreeNode) (bool, error) {
 	return true, nil
 }
 
+func (tree *MerkleTree) Has(hash []byte) (bool, error) {
+	if len(tree.Table) == 0 {
+		return false, nil
+	}
+
+	var i int
+	for i = 0; i < len(tree.Table[0]); i++ {
+		if bytes.Equal(tree.Table[0][i].Hash, hash) {
+			break
+		}
+	}
+
+	if i == len(tree.Table[0]) {
+		return false, nil
+	}
+
+	return tree.Table[0][i].validate()
+}
+
+func rebuild(tree *MerkleTree) error {
+	if len(tree.Table) <= 1 {
+		return RowUnmarshalError{Err: ErrMtFewRows}
+	}
+
+	nodes := make(map[string]*MerkleTreeNode)
+	for i := 0; i < len(tree.Table); i++ {
+		for j := 0; j < len(tree.Table[i]); j++ {
+			n := tree.Table[i][j]
+			_, hasHash := nodes[string(n.Hash)]
+			if hasHash {
+				return NodeUnmarshalError{Err: ErrMtDuplicateHash, Hash: n.Hash}
+			}
+
+			nodes[string(n.Hash)] = n
+		}
+	}
+
+	i, remainder := 0, 0
+	for i = 0; i < len(tree.Table)-1; i++ {
+		if (len(tree.Table[i])+remainder)/2 != len(tree.Table[i+1]) {
+			return RowUnmarshalError{Err: ErrMtNodeSize, Row: i + 1}
+		}
+
+		parentHashs := make(map[string]string)
+		for j := 0; j < len(tree.Table[i]); j++ {
+			n := tree.Table[i][j]
+
+			parent, hasParent := nodes[string(n.ParentHash)]
+			if !hasParent {
+				return NodeUnmarshalError{Err: ErrMtNoParentHash, Hash: n.Hash, ParentHash: n.ParentHash}
+			}
+			n.Parent = parent
+
+			parentHashs[string(parent.Hash)] = string(parent.Hash)
+
+			sibling, hasSibling := nodes[string(n.SiblingHash)]
+			if !hasSibling {
+				return NodeUnmarshalError{Err: ErrMtNoSiblingHash, Hash: n.Hash, SiblingHash: n.SiblingHash}
+			}
+			n.Sibling = sibling
+		}
+
+		if len(parentHashs) < len(tree.Table[i+1]) {
+			return RowUnmarshalError{Err: ErrMtFewParentHash, Row: i}
+		}
+
+		remainder = (len(tree.Table[i]) + remainder) % 2
+	}
+
+	return nil
+}
+
+func (node *MerkleTreeNode) validate() (bool, error) {
+	for node.Parent != nil {
+		if node.Sibling == nil {
+			// log.Printf("%x: no sibling", node.Hash)
+			return false, nil
+		}
+
+		if !bytes.Equal(node.ParentHash, node.Sibling.ParentHash) {
+			// log.Printf("%x: parent hash %x mismatch with sibling %x", node.Hash, node.ParentHash, node.Sibling.ParentHash)
+			return false, nil
+		}
+
+		parentHash, err := computeParentHash(node, node.Sibling)
+		if err != nil {
+			return false, err
+		}
+
+		parentHash1, err := computeParentHash(node.Sibling, node)
+		if err != nil {
+			return false, err
+		}
+
+		if !bytes.Equal(node.ParentHash, parentHash) && !bytes.Equal(node.ParentHash, parentHash1) {
+			log.Printf("%x: compute parent hash %x mismatch with the parent hash %x or %x", node.Hash, node.ParentHash, parentHash, parentHash1)
+			return false, err
+		}
+
+		node = node.Parent
+	}
+
+	return true, nil
+}
+
 func computeParentHash(nodes ...*MerkleTreeNode) ([]byte, error) {
 	if len(nodes) <= 1 {
 		log.Fatalf("few nodes to compute parent hash")
 	}
+
 	hashlist := make([][]byte, len(nodes))
 	for i := 0; i < len(nodes); i++ {
 		hashlist[i] = nodes[i].Hash
