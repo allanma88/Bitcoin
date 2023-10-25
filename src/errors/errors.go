@@ -3,10 +3,11 @@ package errors
 import "errors"
 
 var (
+	ErrIdentityInvalid     = errors.New("invalid identity")
+	ErrIdentityHashInvalid = errors.New("invalid identity hash")
+	ErrIdentityTooEarly    = errors.New("identity is too early")
 	ErrTxExist             = errors.New("transaction already exists")
-	ErrTxHashInvalid       = errors.New("transaction hash invalid")
 	ErrTxTooLate           = errors.New("transaction is later than prev transaction")
-	ErrTxTooEarly          = errors.New("transaction is too early")
 	ErrTxSigInvalid        = errors.New("transaction signature invalid")
 	ErrTxNotFound          = errors.New("transaction not found")
 	ErrTxInsufficientCoins = errors.New("transaction insufficient coins")
@@ -14,4 +15,7 @@ var (
 	ErrInLenOutOfIndex     = errors.New("transaction input out of index of prev transaction outputs")
 	ErrOutLenMismatch      = errors.New("transaction output length mismatch")
 	ErrMerkleInvalid       = errors.New("invalid merkle tree")
+	ErrBlockExist          = errors.New("block already exists")
+	ErrBlockNonceInvalid   = errors.New("invalid block nonce")
+	ErrBlockContentInvalid = errors.New("invalid block content")
 )

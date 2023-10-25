@@ -5,8 +5,6 @@ import (
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
-	"bytes"
-	"time"
 )
 
 type TransactionService struct {
@@ -20,18 +18,22 @@ func NewTransactionService(db database.ITransactionDB) *TransactionService {
 
 // TODO: validate the coin whether spent or not
 func (service *TransactionService) Validate(tx *model.Transaction) error {
-	hash, err := validateHash(tx)
+	hash, err := validateHash[*model.Transaction](tx.Id, tx)
+	if err != nil {
+		return err
+	}
+
+	err = validateTimestamp(tx.Timestamp.AsTime())
 	if err != nil {
 		return err
 	}
 
 	existTx, err := service.GetTx(hash)
-	if existTx != nil && err == nil {
-		return errors.ErrTxExist
+	if err != nil {
+		return err
 	}
-
-	if tx.Timestamp.AsTime().Compare(time.Now().Add(2*time.Hour)) >= 0 {
-		return errors.ErrTxTooEarly
+	if existTx != nil {
+		return errors.ErrTxExist
 	}
 
 	var totalInput uint64
@@ -53,17 +55,6 @@ func (service *TransactionService) Validate(tx *model.Transaction) error {
 	return nil
 }
 
-func validateHash(tx *model.Transaction) ([]byte, error) {
-	hash, err := tx.ComputeHash()
-	if err != nil {
-		return nil, errors.ErrTxHashInvalid
-	}
-	if !bytes.Equal(hash, tx.Id) {
-		return nil, errors.ErrTxHashInvalid
-	}
-	return hash, nil
-}
-
 func (service *TransactionService) validateInputs(tx *model.Transaction) (uint64, error) {
 	//TODO: empty inputs should fail
 	if len(tx.Ins) != int(tx.InLen) {
@@ -83,6 +74,9 @@ func (service *TransactionService) validateInputs(tx *model.Transaction) (uint64
 func (service *TransactionService) validateInput(input *model.In, tx *model.Transaction) (uint64, error) {
 	prevTx, err := service.GetTx(input.PrevHash)
 	if err != nil {
+		return 0, err
+	}
+	if prevTx == nil {
 		return 0, errors.ErrTxNotFound
 	}
 	if input.Index >= uint32(len(prevTx.Outs)) {

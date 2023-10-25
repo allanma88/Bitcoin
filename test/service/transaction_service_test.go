@@ -29,8 +29,8 @@ func Test_Validate_Hash_Mismatch(t *testing.T) {
 
 	service := &service.TransactionService{}
 	err = service.Validate(tx)
-	if !errors.Is(err, bcerrors.ErrTxHashInvalid) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxHashInvalid, err)
+	if !errors.Is(err, bcerrors.ErrIdentityHashInvalid) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrIdentityHashInvalid, err)
 	}
 }
 
@@ -58,8 +58,8 @@ func Test_Validate_Time_Too_Early(t *testing.T) {
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
 	err = service.Validate(tx)
-	if !errors.Is(err, bcerrors.ErrTxTooEarly) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxTooEarly, err)
+	if !errors.Is(err, bcerrors.ErrIdentityTooEarly) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrIdentityTooEarly, err)
 	}
 }
 
@@ -425,32 +425,11 @@ func newTransaction_Sig_Error(prevHash []byte, index uint32, timestamp *timestam
 	return tx, nil
 }
 
-type TestTransactionDB struct {
-	Transactions map[string]*model.Transaction
-}
-
 func newTransactionDB(txs ...*model.Transaction) database.ITransactionDB {
-	transactions := make(map[string]*model.Transaction)
+	basedb := newTestBaseDB[*model.Transaction]()
+	txdb := &database.TransactionDB{IBaseDB: basedb}
 	for _, tx := range txs {
-		transactions[string(tx.Id)] = tx
+		txdb.SaveTx(tx)
 	}
-	txdb := &TestTransactionDB{transactions}
 	return txdb
-}
-
-func (db *TestTransactionDB) SaveTx(tx *model.Transaction) error {
-	return nil
-}
-
-func (db *TestTransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
-	tx, ok := db.Transactions[string(hash)]
-	if ok {
-		return tx, nil
-	} else {
-		return nil, bcerrors.ErrTxNotFound
-	}
-}
-
-func (db *TestTransactionDB) Close() error {
-	return nil
 }
