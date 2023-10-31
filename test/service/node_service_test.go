@@ -17,7 +17,7 @@ import (
 func Test_SendTx_Check_Nodes(t *testing.T) {
 	channels := make(map[string]TxChannel)
 	makeclient := func(channel TxChannel) client.IBitcoinClient {
-		return &TestBitcoinClient{channel: channel}
+		return &TestBitcoinClient{txChannel: channel}
 	}
 	nodes := generateNodes(model.MaxBroadcastNodes+5, 5001, channels, makeclient)
 
@@ -44,10 +44,10 @@ func Test_SendTx_Check_Nodes(t *testing.T) {
 
 func Test_SendTx_Not_Remove_Failed_Not_Enough_Nodes(t *testing.T) {
 	makeclient := func(channel TxChannel) client.IBitcoinClient {
-		return &TestBitcoinClient{channel: channel}
+		return &TestBitcoinClient{txChannel: channel}
 	}
 	makeFailedClient := func(channel TxChannel) client.IBitcoinClient {
-		return &FailedBitcoinClient{channel: channel}
+		return &FailedBitcoinClient{txChannel: channel}
 	}
 
 	sendCounts := []int{model.MaxFailedCount - 2, model.MaxFailedCount - 1, model.MaxFailedCount - 5}
@@ -91,10 +91,10 @@ func Test_SendTx_Not_Remove_Failed_Not_Enough_Nodes(t *testing.T) {
 
 func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 	makeclient := func(channel TxChannel) client.IBitcoinClient {
-		return &TestBitcoinClient{channel: channel}
+		return &TestBitcoinClient{txChannel: channel}
 	}
 	makeFailedClient := func(channel TxChannel) client.IBitcoinClient {
-		return &FailedBitcoinClient{channel: channel}
+		return &FailedBitcoinClient{txChannel: channel}
 	}
 
 	sendCounts := []int{model.MaxFailedCount, model.MaxFailedCount + 1, model.MaxFailedCount + 10}
@@ -144,10 +144,10 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 
 func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 	makeclient := func(channel TxChannel) client.IBitcoinClient {
-		return &TestBitcoinClient{channel: channel}
+		return &TestBitcoinClient{txChannel: channel}
 	}
 	makeProbablyFailedClient := func(channel TxChannel) client.IBitcoinClient {
-		return &ProbablyFailedBitcoinClient{channel: channel, m: 0, n: 2}
+		return &ProbablyFailedBitcoinClient{txChannel: channel, m: 0, n: 2}
 	}
 
 	channels := make(map[string]TxChannel)
@@ -184,18 +184,23 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 }
 
 func Test_RandomPick(t *testing.T) {
-	endpoint := "localhost:5000"
-	addrs := make([]string, model.MaxBroadcastNodes+5)
+	cfg := &config.Config{
+		Endpoint: "localhost:5000",
+	}
+	serv := service.NewNodeService(cfg)
 	for i := 0; i < model.MaxBroadcastNodes+5; i++ {
-		addrs[i] = fmt.Sprintf("localhost:%d", 5000+i)
+		serv.AddNodes(&model.Node{Addr: fmt.Sprintf("localhost:%d", 5000+i+1)})
 	}
-	selected := service.RandomPick(endpoint, addrs, model.MaxBroadcastNodes)
-	if len(selected) != model.MaxBroadcastNodes+1 {
-		t.Fatalf("expect pick %v nodes, actual: %v", model.MaxBroadcastNodes+1, len(selected))
+
+	addrs := serv.RandomPick(model.MaxBroadcastNodes)
+	if len(addrs) != model.MaxBroadcastNodes+1 {
+		t.Fatalf("expect pick %v nodes, actual: %v", model.MaxBroadcastNodes+1, len(addrs))
 	}
-	if addrs[0] != endpoint {
-		t.Fatalf("the first expect node: %v, actual: %v", endpoint, addrs[0])
+
+	if addrs[0] != cfg.Endpoint {
+		t.Fatalf("the first expect node: %v, actual: %v", cfg.Endpoint, addrs[0])
 	}
+
 	addrMap := make(map[string]string)
 	for _, addr := range addrs {
 		_, has := addrMap[addr]
@@ -309,27 +314,40 @@ func newTransaction() (*model.Transaction, error) {
 }
 
 type TestBitcoinClient struct {
-	channel chan *protocol.TransactionReq
+	txChannel    chan *protocol.TransactionReq
+	blockChannel chan *protocol.BlockReq
 }
 
 func (client *TestBitcoinClient) SendTx(req *protocol.TransactionReq) (*protocol.TransactionReply, error) {
-	client.channel <- req
+	client.txChannel <- req
 	return &protocol.TransactionReply{Result: true}, nil
 }
 
+func (client *TestBitcoinClient) SendBlock(req *protocol.BlockReq) (*protocol.BlockReply, error) {
+	// client.channel <- req
+	return &protocol.BlockReply{Result: true}, nil
+}
+
 type FailedBitcoinClient struct {
-	channel chan *protocol.TransactionReq
+	txChannel    chan *protocol.TransactionReq
+	blockChannel chan *protocol.BlockReq
 }
 
 func (client *FailedBitcoinClient) SendTx(req *protocol.TransactionReq) (*protocol.TransactionReply, error) {
-	client.channel <- req
+	client.txChannel <- req
 	return &protocol.TransactionReply{Result: false}, errors.New("send tx failed")
 }
 
+func (client *FailedBitcoinClient) SendBlock(req *protocol.BlockReq) (*protocol.BlockReply, error) {
+	// client.channel <- req
+	return &protocol.BlockReply{Result: false}, errors.New("send tx failed")
+}
+
 type ProbablyFailedBitcoinClient struct {
-	channel chan *protocol.TransactionReq
-	m       int
-	n       int
+	txChannel    chan *protocol.TransactionReq
+	blockChannel chan *protocol.BlockReq
+	m            int
+	n            int
 }
 
 func (client *ProbablyFailedBitcoinClient) SendTx(req *protocol.TransactionReq) (*protocol.TransactionReply, error) {
@@ -338,7 +356,18 @@ func (client *ProbablyFailedBitcoinClient) SendTx(req *protocol.TransactionReq) 
 		client.m = 0
 		return &protocol.TransactionReply{Result: false}, errors.New("send tx failed")
 	} else {
-		client.channel <- req
+		client.txChannel <- req
 		return &protocol.TransactionReply{Result: true}, nil
+	}
+}
+
+func (client *ProbablyFailedBitcoinClient) SendBlock(req *protocol.BlockReq) (*protocol.BlockReply, error) {
+	client.m++
+	if client.m == client.n {
+		client.m = 0
+		return &protocol.BlockReply{Result: false}, errors.New("send tx failed")
+	} else {
+		// client.channel <- req
+		return &protocol.BlockReply{Result: true}, nil
 	}
 }

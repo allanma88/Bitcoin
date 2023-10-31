@@ -17,6 +17,7 @@ const (
 
 type IBitcoinClient interface {
 	SendTx(req *protocol.TransactionReq) (*protocol.TransactionReply, error)
+	SendBlock(req *protocol.BlockReq) (*protocol.BlockReply, error)
 }
 
 type BitcoinClient struct {
@@ -29,11 +30,33 @@ func NewBitcoinClient(addr string) IBitcoinClient {
 }
 
 func (cli *BitcoinClient) SendTx(req *protocol.TransactionReq) (*protocol.TransactionReply, error) {
+	ctx, cancel, err := cli.prepare()
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
+	client := protocol.NewTransactionClient(cli.conn)
+	return client.ExecuteTx(ctx, req)
+}
+
+func (cli *BitcoinClient) SendBlock(req *protocol.BlockReq) (*protocol.BlockReply, error) {
+	ctx, cancel, err := cli.prepare()
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
+	client := protocol.NewBlockClient(cli.conn)
+	return client.AddBlock(ctx, req)
+}
+
+func (cli *BitcoinClient) prepare() (context.Context, context.CancelFunc, error) {
 	if cli.conn == nil || cli.conn.GetState() == connectivity.Shutdown {
 		// Set up a connection to the server.
 		conn, err := grpc.Dial(cli.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		log.Printf("connected to %s", cli.addr)
 		cli.conn = conn
@@ -41,8 +64,5 @@ func (cli *BitcoinClient) SendTx(req *protocol.TransactionReq) (*protocol.Transa
 
 	// Contact the server and print out its response.
 	ctx, cancel := context.WithTimeout(context.Background(), SENDTIMEOUT)
-	defer cancel()
-
-	client := protocol.NewTransactionClient(cli.conn)
-	return client.ExecuteTx(ctx, req)
+	return ctx, cancel, nil
 }

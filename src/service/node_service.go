@@ -4,6 +4,7 @@ import (
 	"Bitcoin/src/bitcoin/client"
 	"Bitcoin/src/config"
 	"Bitcoin/src/model"
+	"Bitcoin/src/protocol"
 	"fmt"
 	"log"
 	"math/rand"
@@ -18,6 +19,8 @@ type NodeService struct {
 	nodes map[string]*model.Node
 	cfg   *config.Config
 }
+
+type sendFunc[T any] func(cli client.IBitcoinClient, req T) error
 
 func NewNodeService(cfg *config.Config) *NodeService {
 	service := &NodeService{
@@ -64,25 +67,41 @@ func (service *NodeService) GetNode(addr string) *model.Node {
 }
 
 func (service *NodeService) SendTx(tx *model.Transaction) {
-	nodes := make(map[string]*model.Node)
-	addrs := make([]string, 0, len(nodes))
+	addrs := service.RandomPick(model.MaxBroadcastNodes)
+	req := model.TransactionTo(tx, addrs)
 
-	service.lock.RLock()
-	for k, v := range service.nodes {
-		addrs = append(addrs, k)
-		nodes[k] = v
+	send := func(cli client.IBitcoinClient, req *protocol.TransactionReq) error {
+		_, err := cli.SendTx(req)
+		return err
 	}
-	service.lock.RUnlock()
 
-	selectedAddrs := RandomPick(service.cfg.Endpoint, addrs, model.MaxBroadcastNodes)
-	deleted := make([]string, 0, len(nodes))
+	sendReq[*protocol.TransactionReq](service, req, send)
+}
+
+func (service *NodeService) SendBlock(block *model.Block) {
+	addrs := service.RandomPick(model.MaxBroadcastNodes)
+	req, err := model.BlockTo(block, addrs)
+	if err != nil {
+		log.Printf("convert to block request error: %v", err)
+		return
+	}
+
+	send := func(cli client.IBitcoinClient, req *protocol.BlockReq) error {
+		_, err := cli.SendBlock(req)
+		return err
+	}
+
+	sendReq[*protocol.BlockReq](service, req, send)
+}
+
+func sendReq[T any](service *NodeService, req T, send sendFunc[T]) {
+	deleted := make([]string, 0, len(service.nodes))
 	wg := &sync.WaitGroup{}
 
-	for _, node := range nodes {
-		req := model.TransactionTo(tx, selectedAddrs)
+	for _, node := range service.nodes {
 		wg.Add(1)
 		go func(n *model.Node) {
-			_, err := n.Client.SendTx(req) //TODO: parallel send tx
+			err := send(n.Client, req)
 			if err != nil {
 				log.Printf("sent transaction failed: %v", err)
 				n.Failed++
@@ -107,13 +126,22 @@ func (service *NodeService) SendTx(tx *model.Transaction) {
 	service.lock.Unlock()
 }
 
-func RandomPick(endpoint string, addrs []string, n int) []string {
-	if n > len(addrs) {
+func (service *NodeService) RandomPick(n int) []string {
+	addrs := make([]string, 0, len(service.nodes))
+
+	if n > len(service.nodes) {
 		n = len(addrs)
 	}
-	indics := rand.Perm(len(addrs))
+
+	service.lock.RLock()
+	for k := range service.nodes {
+		addrs = append(addrs, k)
+	}
+	service.lock.RUnlock()
+
+	indics := rand.Perm(n)
 	selects := make([]string, 1, n+1)
-	selects[0] = endpoint
+	selects[0] = service.cfg.Endpoint
 	for i := 0; i < n; i++ {
 		selects = append(selects, addrs[indics[i]])
 	}

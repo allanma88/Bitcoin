@@ -14,10 +14,12 @@ import (
 
 type BitcoinServer struct {
 	protocol.TransactionServer
-	txService   *service.TransactionService
-	nodeService *service.NodeService
-	pendingTxs  []*model.Transaction
-	txQueue     chan *model.Transaction
+	txService           *service.TransactionService
+	blockService        *service.BlockService
+	nodeService         *service.NodeService
+	txBroadcastQueue    chan *model.Transaction
+	blockBroadcastQueue chan *model.Block
+	mineQueue           chan *model.Transaction
 }
 
 func NewBitcoinServer(cfg *config.Config) (*BitcoinServer, error) {
@@ -27,11 +29,15 @@ func NewBitcoinServer(cfg *config.Config) (*BitcoinServer, error) {
 	}
 
 	txdb := database.NewTransactionDB(db)
+	blockdb := database.NewBlockDB(db)
+	blockContentDb := database.NewBlockContentDB(db)
 	server := &BitcoinServer{
-		txService:   service.NewTransactionService(txdb),
-		nodeService: service.NewNodeService(cfg),
-		pendingTxs:  make([]*model.Transaction, 0, model.PendingTxSize),
-		txQueue:     make(chan *model.Transaction, model.TxQueueSize),
+		nodeService:         service.NewNodeService(cfg),
+		txService:           service.NewTransactionService(txdb),
+		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
+		txBroadcastQueue:    make(chan *model.Transaction, model.TxBroadcastQueueSize),
+		blockBroadcastQueue: make(chan *model.Block, model.BlockBroadcastQueueSize),
+		mineQueue:           make(chan *model.Transaction, model.MaxTxSizePerBlock),
 	}
 	return server, nil
 }
@@ -57,10 +63,10 @@ func (s *BitcoinServer) ExecuteTx(ctx context.Context, request *protocol.Transac
 	}
 	log.Printf("saved transaction: %x", tx.Id)
 
-	s.pendingTxs = append(s.pendingTxs, tx)
-	log.Printf("append to pending txs: %x", tx.Id)
-
-	go func() { s.txQueue <- tx }()
+	go func() {
+		s.txBroadcastQueue <- tx
+		s.mineQueue <- tx
+	}()
 	log.Printf("broadcast the transaction: %x", tx.Id)
 
 	err = s.nodeService.AddAddrs(request.Nodes)
@@ -73,8 +79,69 @@ func (s *BitcoinServer) ExecuteTx(ctx context.Context, request *protocol.Transac
 	return &protocol.TransactionReply{Result: true}, nil
 }
 
+func (s *BitcoinServer) AddBlock(ctx context.Context, request *protocol.BlockReq) (*protocol.BlockReply, error) {
+	block, err := model.BlockFrom(request)
+	if err != nil {
+		return &protocol.BlockReply{Result: false}, err
+	}
+	log.Printf("received block: %x", block.Hash)
+
+	err = s.blockService.Validate(block)
+	if err != nil {
+		log.Printf("validate block %x failed: %v", block.Hash, err)
+		return &protocol.BlockReply{Result: false}, err
+	}
+	log.Printf("validated block: %x", block.Hash)
+
+	err = s.blockService.SaveBlock(block)
+	if err != nil {
+		log.Printf("save block %x failed: %v", block.Hash, err)
+		return &protocol.BlockReply{Result: false}, err
+	}
+	log.Printf("saved block: %x", block.Hash)
+
+	go func() {
+		s.blockBroadcastQueue <- block
+	}()
+	log.Printf("broadcast the block: %x", block.Hash)
+
+	err = s.nodeService.AddAddrs(request.Nodes)
+	if err != nil {
+		log.Printf("add nodes failed: %v", err)
+		return &protocol.BlockReply{Result: false}, err
+	}
+	log.Printf("added to the node list: %x", block.Hash)
+
+	return &protocol.BlockReply{Result: true}, nil
+}
+
 func (s *BitcoinServer) BroadcastTx() {
-	for tx := range s.txQueue {
+	for tx := range s.txBroadcastQueue {
 		s.nodeService.SendTx(tx)
+	}
+}
+
+func (s *BitcoinServer) BroadcastBlock() {
+	for block := range s.blockBroadcastQueue {
+		s.nodeService.SendBlock(block)
+	}
+}
+
+func (s *BitcoinServer) MineBlock() {
+	for {
+		txs := make([]*model.Transaction, model.MaxTxSizePerBlock)
+		for i := 0; i < model.MaxTxSizePerBlock; i++ {
+			txs[i] = <-s.mineQueue
+		}
+
+		block, err := s.blockService.MineBlock(txs)
+		if err != nil {
+			log.Printf("mine block error: %v", err)
+			continue
+		}
+
+		s.txService.RemoveTxs(txs)
+
+		s.blockBroadcastQueue <- block
 	}
 }

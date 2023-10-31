@@ -2,8 +2,9 @@ package model
 
 const (
 	//server
-	PendingTxSize = 10
-	TxQueueSize   = 10
+	TxBroadcastQueueSize    = 10
+	BlockBroadcastQueueSize = 10
+	MaxTxSizePerBlock       = 10
 	//node
 	MaxBroadcastNodes = 10
 	MaxFailedCount    = 10

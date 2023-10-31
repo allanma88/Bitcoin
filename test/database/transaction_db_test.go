@@ -1,4 +1,4 @@
-package db
+package database
 
 import (
 	"Bitcoin/src/database"
@@ -55,7 +55,21 @@ func Test_CRUD(t *testing.T) {
 		t.Errorf("transaction are not identical, expect: %x, actual: %x", expectHash, actualHash)
 	}
 
-	cleanUp(txdb)
+	err = txdb.RemoveTx(tx)
+	if err != nil {
+		t.Errorf("remove tx error: %s", err)
+	}
+
+	newTx, err = txdb.GetTx(tx.Id)
+	if err != nil {
+		t.Errorf("get tx error: %s", err)
+	}
+	if newTx != nil {
+		t.Errorf("get an deleted tx %x", tx.Id)
+	}
+
+	txdb.Close()
+	os.RemoveAll(DBPath)
 }
 
 func newTransaction(ins []*model.In, outs []*model.Out) (*model.Transaction, error) {
@@ -72,9 +86,4 @@ func newTransaction(ins []*model.In, outs []*model.Out) (*model.Transaction, err
 	}
 	tx.Id = hash
 	return tx, nil
-}
-
-func cleanUp(txdb database.ITransactionDB) {
-	txdb.Close()
-	os.RemoveAll(DBPath)
 }

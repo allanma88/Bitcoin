@@ -426,7 +426,7 @@ func newTransaction_Sig_Error(prevHash []byte, index uint32, timestamp *timestam
 }
 
 func newTransactionDB(txs ...*model.Transaction) database.ITransactionDB {
-	basedb := newTestBaseDB[*model.Transaction]()
+	basedb := newTestBaseDB[model.Transaction]()
 	txdb := &database.TransactionDB{IBaseDB: basedb}
 	for _, tx := range txs {
 		txdb.SaveTx(tx)

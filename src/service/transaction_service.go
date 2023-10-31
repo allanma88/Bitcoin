@@ -5,6 +5,7 @@ import (
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
+	"log"
 )
 
 type TransactionService struct {
@@ -53,6 +54,15 @@ func (service *TransactionService) Validate(tx *model.Transaction) error {
 	}
 
 	return nil
+}
+
+func (service *TransactionService) RemoveTxs(txs []*model.Transaction) {
+	for _, tx := range txs {
+		err := service.ITransactionDB.RemoveTx(tx)
+		if err != nil {
+			log.Printf("remove tx %x error", tx.Id)
+		}
+	}
 }
 
 func (service *TransactionService) validateInputs(tx *model.Transaction) (uint64, error) {

@@ -13,15 +13,16 @@ const (
 type ITransactionDB interface {
 	SaveTx(tx *model.Transaction) error
 	GetTx(hash []byte) (*model.Transaction, error)
+	RemoveTx(tx *model.Transaction) error
 	Close() error
 }
 
 type TransactionDB struct {
-	IBaseDB[*model.Transaction]
+	IBaseDB[model.Transaction]
 }
 
 func NewTransactionDB(db *leveldb.DB) *TransactionDB {
-	basedb := &BaseDB[*model.Transaction]{Database: db}
+	basedb := &BaseDB[model.Transaction]{Database: db}
 	txdb := &TransactionDB{IBaseDB: basedb}
 	return txdb
 }
@@ -31,13 +32,9 @@ func (db *TransactionDB) SaveTx(tx *model.Transaction) error {
 }
 
 func (db *TransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
-	var tx model.Transaction
-	err := db.Get([]byte(TxTable), hash, &tx)
-	if err == leveldb.ErrNotFound {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &tx, nil
+	return db.Get([]byte(TxTable), hash)
+}
+
+func (db *TransactionDB) RemoveTx(tx *model.Transaction) error {
+	return db.Remove([]byte(TxTable), tx.Id)
 }

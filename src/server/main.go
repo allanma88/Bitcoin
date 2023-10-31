@@ -34,7 +34,9 @@ func main() {
 		log.Fatalf("failed to create server: %v", err)
 	}
 
+	go server.MineBlock()
 	go server.BroadcastTx()
+	go server.BroadcastBlock()
 
 	protocol.RegisterTransactionServer(register, server)
 	log.Printf("server listening at %v", listener.Addr())

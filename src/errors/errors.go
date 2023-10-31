@@ -16,6 +16,8 @@ var (
 	ErrOutLenMismatch      = errors.New("transaction output length mismatch")
 	ErrMerkleInvalid       = errors.New("invalid merkle tree")
 	ErrBlockExist          = errors.New("block already exists")
+	ErrBlockNotFound       = errors.New("block not found")
 	ErrBlockNonceInvalid   = errors.New("invalid block nonce")
 	ErrBlockContentInvalid = errors.New("invalid block content")
+	ErrBlockNoValidHash    = errors.New("no valid block hash")
 )

@@ -10,15 +10,16 @@ type Identity interface {
 	ComputeHash() ([]byte, error)
 }
 
-func validateHash[T Identity](id []byte, model Identity) ([]byte, error) {
-	hash, err := model.ComputeHash()
+func validateHash[T Identity](hash []byte, model Identity) ([]byte, error) {
+	computeHash, err := model.ComputeHash()
 	if err != nil {
 		return nil, errors.ErrIdentityInvalid
 	}
-	if !bytes.Equal(hash, id) {
+
+	if !bytes.Equal(computeHash, hash) {
 		return nil, errors.ErrIdentityHashInvalid
 	}
-	return hash, nil
+	return computeHash, nil
 }
 
 func validateTimestamp(t time.Time) error {
