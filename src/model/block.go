@@ -7,7 +7,9 @@ import (
 	"Bitcoin/src/protocol"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/peteprogrammer/go-automapper"
@@ -20,7 +22,7 @@ type Block struct {
 	RootHash   []byte             `json:"roothash,omitempty"`
 	Nonce      uint32             `json:"nonce,omitempty"`
 	Difficulty float64            `json:"difficulty,omitempty"`
-	Timestamp  time.Time          `json:"timestamp,omitempty"`
+	Time       time.Time          `json:"timestamp,omitempty"`
 	Body       *merkle.MerkleTree `json:"-"`
 }
 
@@ -31,7 +33,7 @@ func (block *Block) MarshalJSON() ([]byte, error) {
 		Prevhash   string    `json:"prevhash,omitempty"`
 		RootHash   string    `json:"roothash,omitempty"`
 		Nonce      uint32    `json:"nonce,omitempty"`
-		Difficulty float64   `json:"difficulty,omitempty"`
+		Difficulty string    `json:"difficulty,omitempty"`
 		Timestamp  time.Time `json:"timestamp,omitempty"`
 	}{
 		Id:         block.Id,
@@ -39,8 +41,8 @@ func (block *Block) MarshalJSON() ([]byte, error) {
 		Prevhash:   hex.EncodeToString(block.Prevhash),
 		RootHash:   hex.EncodeToString(block.RootHash),
 		Nonce:      block.Nonce,
-		Difficulty: block.Difficulty,
-		Timestamp:  block.Timestamp,
+		Difficulty: fmt.Sprintf("%.0f", block.Difficulty),
+		Timestamp:  block.Time,
 	}
 	return json.Marshal(s)
 }
@@ -52,7 +54,7 @@ func (block *Block) UnmarshalJSON(data []byte) error {
 		Prevhash   string    `json:"prevhash,omitempty"`
 		RootHash   string    `json:"roothash,omitempty"`
 		Nonce      uint32    `json:"nonce,omitempty"`
-		Difficulty float64   `json:"difficulty,omitempty"`
+		Difficulty string    `json:"difficulty,omitempty"`
 		Timestamp  time.Time `json:"timestamp,omitempty"`
 	}
 
@@ -78,9 +80,15 @@ func (block *Block) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	difficulty, err := strconv.ParseFloat(s.Difficulty, 64)
+	if err != nil {
+		return err
+	}
+
+	block.Difficulty = difficulty
+
 	block.Nonce = s.Nonce
-	block.Difficulty = s.Difficulty
-	block.Timestamp = s.Timestamp
+	block.Time = s.Timestamp
 	return err
 }
 
@@ -93,7 +101,7 @@ func BlockFrom(request *protocol.BlockReq) (*Block, error) {
 	}
 
 	automapper.MapLoose(request, &block)
-	block.Timestamp = time.UnixMilli(request.Timestamp)
+	block.Time = time.UnixMilli(request.Timestamp)
 	return &block, nil
 }
 
@@ -105,7 +113,7 @@ func BlockTo(block *Block, nodes []string) (*protocol.BlockReq, error) {
 
 	var request protocol.BlockReq
 	automapper.MapLoose(block, &request)
-	request.Timestamp = block.Timestamp.UnixMilli()
+	request.Timestamp = block.Time.UnixMilli()
 
 	request.Content = content
 	request.Nodes = nodes

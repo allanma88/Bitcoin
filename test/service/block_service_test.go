@@ -42,7 +42,7 @@ func makeBlock(difficultyLevel int) (*model.Block, error) {
 	block := &model.Block{
 		RootHash:   content.Table[len(content.Table)-1][0].Hash,
 		Difficulty: model.ComputeDifficulty(model.MakeDifficulty(difficultyLevel)),
-		Timestamp:  time.Now().UTC(),
+		Time:       time.Now().UTC(),
 		Body:       content,
 	}
 

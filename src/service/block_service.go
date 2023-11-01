@@ -52,7 +52,7 @@ func (service *BlockService) MakeBlock(transactions []*model.Transaction) (*mode
 	block := &model.Block{
 		RootHash:   content.Table[len(content.Table)-1][0].Hash,
 		Difficulty: difficulty,
-		Timestamp:  time.Now().UTC(),
+		Time:       time.Now().UTC(),
 		Body:       content,
 	}
 
@@ -80,7 +80,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return err
 	}
 
-	err = validateTimestamp(block.Timestamp)
+	err = validateTimestamp(block.Time)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (service *BlockService) ComputeAvgBlockDuration(lastBlocks []*model.Block) 
 
 	var actualDuration time.Duration
 	for i := 1; i < len(lastBlocks); i++ {
-		actualDuration += lastBlocks[i].Timestamp.Sub(lastBlocks[i-1].Timestamp)
+		actualDuration += lastBlocks[i].Time.Sub(lastBlocks[i-1].Time)
 	}
 	actualDuration = time.Duration(int64(actualDuration) / int64(len(lastBlocks)))
 	return actualDuration, nil

@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func Test__Transaction_ComputeHash_Hash_Not_Change(t *testing.T) {
+func Test_Transaction_ComputeHash_Hash_Not_Change(t *testing.T) {
 	tx, err := newTransaction()
 	if err != nil {
 		t.Fatalf("new transaction error: %v", err)

@@ -30,14 +30,14 @@ service Block {
 // The transaction message containing the user's name.
 message BlockReq {
   uint64 Id = 1;
-	bytes Hash = 2;   
-	bytes Prevhash = 3;      
-	bytes RootHash = 4;    
-	uint32 Nonce = 5;
-	double Difficulty = 6;       
-	int64  Timestamp = 7;
-    repeated string nodes = 8;
-	bytes Content = 9;
+  bytes Hash = 2;   
+  bytes Prevhash = 3;      
+  bytes RootHash = 4;    
+  uint32 Nonce = 5;
+  double Difficulty = 6;       
+  int64 Timestamp = 7;
+  repeated string nodes = 8;
+  bytes Content = 9;
 }
 
 // The response message containing the greetings
