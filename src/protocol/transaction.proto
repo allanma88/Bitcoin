@@ -19,14 +19,12 @@ option java_multiple_files = true;
 option java_package = "io.grpc.examples.helloworld";
 option java_outer_classname = "HelloWorldProto";
 
-import "google/protobuf/timestamp.proto";
-
 package protocol;
 
 // The transaction service definition.
 service Transaction {
-  // create a new traction
-  rpc ExecuteTx (TransactionReq) returns (TransactionReply) {}
+  // add a traction
+  rpc AddTx (TransactionReq) returns (TransactionReply) {}
 }
 
 message InReq {
@@ -42,12 +40,12 @@ message OutReq {
 
 // The transaction message containing the user's name.
 message TransactionReq {
-  bytes id = 1;
+  bytes hash = 1;
   uint32 in_len = 2;
   uint32 out_len = 3;
   repeated InReq ins = 4;
   repeated OutReq outs = 5;
-  google.protobuf.Timestamp timestamp = 6;
+  int64 time = 6;
   repeated string nodes = 7;
 }
 

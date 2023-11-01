@@ -68,7 +68,8 @@ func (service *NodeService) GetNode(addr string) *model.Node {
 
 func (service *NodeService) SendTx(tx *model.Transaction) {
 	addrs := service.RandomPick(model.MaxBroadcastNodes)
-	req := model.TransactionTo(tx, addrs)
+	req := model.TransactionTo(tx)
+	req.Nodes = addrs
 
 	send := func(cli client.IBitcoinClient, req *protocol.TransactionReq) error {
 		_, err := cli.SendTx(req)

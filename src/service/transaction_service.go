@@ -19,12 +19,12 @@ func NewTransactionService(db database.ITransactionDB) *TransactionService {
 
 // TODO: validate the coin whether spent or not
 func (service *TransactionService) Validate(tx *model.Transaction) error {
-	hash, err := validateHash[*model.Transaction](tx.Id, tx)
+	hash, err := validateHash[*model.Transaction](tx.Hash, tx)
 	if err != nil {
 		return err
 	}
 
-	err = validateTimestamp(tx.Timestamp.AsTime())
+	err = validateTimestamp(tx.Timestamp)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (service *TransactionService) RemoveTxs(txs []*model.Transaction) {
 	for _, tx := range txs {
 		err := service.ITransactionDB.RemoveTx(tx)
 		if err != nil {
-			log.Printf("remove tx %x error", tx.Id)
+			log.Printf("remove tx %x error", tx.Hash)
 		}
 	}
 }
@@ -92,11 +92,11 @@ func (service *TransactionService) validateInput(input *model.In, tx *model.Tran
 	if input.Index >= uint32(len(prevTx.Outs)) {
 		return 0, errors.ErrInLenOutOfIndex
 	}
-	if prevTx.Timestamp.AsTime().Compare(tx.Timestamp.AsTime()) >= 0 {
+	if prevTx.Timestamp.Compare(tx.Timestamp) >= 0 {
 		return 0, errors.ErrTxTooLate
 	}
 	prevOutput := prevTx.Outs[input.Index]
-	valid, err := cryptography.Verify(prevOutput.Pubkey, prevTx.Id, input.Signature)
+	valid, err := cryptography.Verify(prevOutput.Pubkey, prevTx.Hash, input.Signature)
 	if !valid || err != nil {
 		return 0, errors.ErrTxSigInvalid
 	}

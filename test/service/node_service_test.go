@@ -10,8 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
 )
 
 func Test_SendTx_Check_Nodes(t *testing.T) {
@@ -302,14 +301,14 @@ func newTransaction() (*model.Transaction, error) {
 	tx := &model.Transaction{
 		InLen:     0,
 		OutLen:    0,
-		Timestamp: timestamppb.Now(),
+		Timestamp: time.Now(),
 	}
 	originalHash, err := cryptography.Hash(tx)
 	if err != nil {
 		return nil, err
 	}
 
-	tx.Id = originalHash
+	tx.Hash = originalHash
 	return tx, nil
 }
 

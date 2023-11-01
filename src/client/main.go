@@ -6,8 +6,7 @@ import (
 	"Bitcoin/src/protocol"
 	"flag"
 	"log"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
 )
 
 var (
@@ -17,18 +16,18 @@ var (
 func main() {
 	flag.Parse()
 	req := &protocol.TransactionReq{
-		InLen:     0,
-		OutLen:    0,
-		Ins:       []*protocol.InReq{},
-		Outs:      []*protocol.OutReq{},
-		Timestamp: timestamppb.Now(),
+		InLen:  0,
+		OutLen: 0,
+		Ins:    []*protocol.InReq{},
+		Outs:   []*protocol.OutReq{},
+		Time:   time.Now().UnixMilli(),
 	}
 	hash, err := cryptography.Hash(req)
 	if err != nil {
 		log.Fatalf("hash transaction request failed: %v", err)
 
 	}
-	req.Id = hash
+	req.Hash = hash
 
 	client := client.NewBitcoinClient(*addr)
 	reply, err := client.SendTx(req)

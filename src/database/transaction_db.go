@@ -28,7 +28,7 @@ func NewTransactionDB(db *leveldb.DB) *TransactionDB {
 }
 
 func (db *TransactionDB) SaveTx(tx *model.Transaction) error {
-	return db.Save([]byte(TxTable), tx.Id, tx)
+	return db.Save([]byte(TxTable), tx.Hash, tx)
 }
 
 func (db *TransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
@@ -36,5 +36,5 @@ func (db *TransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
 }
 
 func (db *TransactionDB) RemoveTx(tx *model.Transaction) error {
-	return db.Remove([]byte(TxTable), tx.Id)
+	return db.Remove([]byte(TxTable), tx.Hash)
 }

@@ -11,12 +11,10 @@ import (
 	"encoding/hex"
 	"testing"
 	"time"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Test_Hash_Field_Order_Doesnot_Matter(t *testing.T) {
-	timestamp := timestamppb.Now()
+	timestamp := time.Now()
 	tx1 := &model.Transaction{
 		InLen:     1,
 		OutLen:    1,
@@ -99,7 +97,7 @@ func Test_Transaction_Hash(t *testing.T) {
 		OutLen:    1,
 		Ins:       []*model.In{{}},
 		Outs:      []*model.Out{{}},
-		Timestamp: timestamppb.New(timestamp),
+		Timestamp: timestamp,
 	}
 
 	hash, err := cryptography.Hash(tx)
@@ -108,7 +106,7 @@ func Test_Transaction_Hash(t *testing.T) {
 	}
 
 	actual := hex.EncodeToString(hash)
-	expect := "c01fae41c39d8329f0060c00d12be1d0f8f5b598d6f974ed37dde81681338781"
+	expect := "2c15e1e873280cf7f2842a661a085f93a64552f81d76527e98d664e46f8eade9"
 	if actual != expect {
 		t.Fatalf("Wrong hash, expect: %v, actual: %v", expect, actual)
 	}
@@ -120,11 +118,11 @@ func Test_TransactionReq_Hash(t *testing.T) {
 		t.Fatalf("Parse time err: %s", err)
 	}
 	req := &protocol.TransactionReq{
-		InLen:     1,
-		OutLen:    1,
-		Ins:       []*protocol.InReq{{}},
-		Outs:      []*protocol.OutReq{{}},
-		Timestamp: timestamppb.New(timestamp),
+		InLen:  1,
+		OutLen: 1,
+		Ins:    []*protocol.InReq{{}},
+		Outs:   []*protocol.OutReq{{}},
+		Time:   timestamp.UnixMilli(),
 	}
 
 	hash, err := cryptography.Hash(req)
@@ -133,7 +131,7 @@ func Test_TransactionReq_Hash(t *testing.T) {
 	}
 
 	actual := hex.EncodeToString(hash)
-	expect := "c01fae41c39d8329f0060c00d12be1d0f8f5b598d6f974ed37dde81681338781"
+	expect := "32594ab9b72aff0eb0e2126166c4524556e3880aff596d836572edccc57a9316"
 	if actual != expect {
 		t.Fatalf("Wrong hash, expect: %v, actual: %v", expect, actual)
 	}

@@ -6,9 +6,9 @@ import (
 	"bytes"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -34,13 +34,13 @@ func Test_CRUD(t *testing.T) {
 		t.Errorf("save transaction error: %s", err)
 	}
 
-	newTx, err := txdb.GetTx(tx.Id)
+	newTx, err := txdb.GetTx(tx.Hash)
 	if err != nil {
 		t.Errorf("get transaction error: %s", err)
 	}
 
-	if !bytes.Equal(tx.Id, newTx.Id) {
-		t.Errorf("transaction hash are not identical, expect: %x, actual: %x", tx.Id, newTx.Id)
+	if !bytes.Equal(tx.Hash, newTx.Hash) {
+		t.Errorf("transaction hash are not identical, expect: %x, actual: %x", tx.Hash, newTx.Hash)
 	}
 
 	expectHash, err := tx.ComputeHash()
@@ -60,12 +60,12 @@ func Test_CRUD(t *testing.T) {
 		t.Errorf("remove tx error: %s", err)
 	}
 
-	newTx, err = txdb.GetTx(tx.Id)
+	newTx, err = txdb.GetTx(tx.Hash)
 	if err != nil {
 		t.Errorf("get tx error: %s", err)
 	}
 	if newTx != nil {
-		t.Errorf("get an deleted tx %x", tx.Id)
+		t.Errorf("get an deleted tx %x", tx.Hash)
 	}
 
 	txdb.Close()
@@ -78,12 +78,12 @@ func newTransaction(ins []*model.In, outs []*model.Out) (*model.Transaction, err
 		OutLen:    uint32(len(outs)),
 		Ins:       ins,
 		Outs:      outs,
-		Timestamp: timestamppb.Now(),
+		Timestamp: time.Now(),
 	}
 	hash, err := tx.ComputeHash()
 	if err != nil {
 		return nil, err
 	}
-	tx.Id = hash
+	tx.Hash = hash
 	return tx, nil
 }

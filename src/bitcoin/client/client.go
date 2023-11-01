@@ -37,7 +37,7 @@ func (cli *BitcoinClient) SendTx(req *protocol.TransactionReq) (*protocol.Transa
 	defer cancel()
 
 	client := protocol.NewTransactionClient(cli.conn)
-	return client.ExecuteTx(ctx, req)
+	return client.AddTx(ctx, req)
 }
 
 func (cli *BitcoinClient) SendBlock(req *protocol.BlockReq) (*protocol.BlockReply, error) {

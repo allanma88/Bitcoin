@@ -42,39 +42,37 @@ func NewBitcoinServer(cfg *config.Config) (*BitcoinServer, error) {
 	return server, nil
 }
 
-func (s *BitcoinServer) ExecuteTx(ctx context.Context, request *protocol.TransactionReq) (*protocol.TransactionReply, error) {
-	tx, err := model.TransactionFrom(request)
-	if err != nil {
-		return &protocol.TransactionReply{Result: false}, err
-	}
-	log.Printf("received transaction: %x", tx.Id)
+func (s *BitcoinServer) AddTx(ctx context.Context, request *protocol.TransactionReq) (*protocol.TransactionReply, error) {
+	tx := model.TransactionFrom(request)
 
-	err = s.txService.Validate(tx)
+	log.Printf("received transaction: %x", tx.Hash)
+
+	err := s.txService.Validate(tx)
 	if err != nil {
-		log.Printf("validate transaction %x failed: %v", tx.Id, err)
+		log.Printf("validate transaction %x failed: %v", tx.Hash, err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
-	log.Printf("validated transaction: %x", tx.Id)
+	log.Printf("validated transaction: %x", tx.Hash)
 
 	err = s.txService.SaveTx(tx)
 	if err != nil {
-		log.Printf("save transaction %x failed: %v", tx.Id, err)
+		log.Printf("save transaction %x failed: %v", tx.Hash, err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
-	log.Printf("saved transaction: %x", tx.Id)
+	log.Printf("saved transaction: %x", tx.Hash)
 
 	go func() {
 		s.txBroadcastQueue <- tx
 		s.mineQueue <- tx
 	}()
-	log.Printf("broadcast the transaction: %x", tx.Id)
+	log.Printf("broadcast the transaction: %x", tx.Hash)
 
 	err = s.nodeService.AddAddrs(request.Nodes)
 	if err != nil {
 		log.Printf("add nodes failed: %v", err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
-	log.Printf("added to the node list: %x", tx.Id)
+	log.Printf("added to the node list: %x", tx.Hash)
 
 	return &protocol.TransactionReply{Result: true}, nil
 }
