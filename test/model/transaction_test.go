@@ -6,30 +6,29 @@ import (
 	"Bitcoin/src/protocol"
 	"Bitcoin/test"
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"log"
+	"os"
 	"testing"
 	"time"
 )
 
-func Test_ComputeHash_Hash_Not_Change(t *testing.T) {
-	tx := &model.Transaction{
-		InLen:     0,
-		OutLen:    0,
-		Timestamp: time.Now(),
-	}
-	originalHash, err := cryptography.Hash(tx)
+func Test__Transaction_ComputeHash_Hash_Not_Change(t *testing.T) {
+	tx, err := newTransaction()
 	if err != nil {
-		t.Fatalf("transaction hash error: %s", err)
+		t.Fatalf("new transaction error: %v", err)
 	}
 
-	tx.Hash = originalHash
+	hash, err := tx.ComputeHash()
+	if err != nil {
+		t.Fatalf("compute hash error: %v", err)
+	}
 
-	tx.ComputeHash()
-	if bytes.Equal(originalHash, tx.Hash) {
+	if bytes.Equal(hash, tx.Hash) {
 		t.Log("transaction hash didn't changed after serialize")
 	} else {
-		t.Fatalf("transaction hash is changed from [%x] to [%x]", originalHash, tx.Hash)
+		t.Fatalf("transaction hash is changed from [%x] to [%x]", tx.Hash, hash)
 	}
 }
 
@@ -59,7 +58,7 @@ func Test_Transaction_To(t *testing.T) {
 	}
 }
 
-func Test_Marshal(t *testing.T) {
+func Test_Transaction_Marshal(t *testing.T) {
 	tx, err := newTransaction()
 	if err != nil {
 		t.Fatalf("new transaction error: %s", err)
@@ -70,6 +69,25 @@ func Test_Marshal(t *testing.T) {
 		t.Fatalf("marshal error: %s", err)
 	}
 	t.Logf("json: %s", string(data))
+}
+
+func Test_Transaction_Unmarshal(t *testing.T) {
+	data, err := os.ReadFile("transaction.json")
+	if err != nil {
+		t.Fatalf("read file error: %s", err)
+	}
+
+	var tx model.Transaction
+	err = json.Unmarshal(data, &tx)
+	if err != nil {
+		t.Fatalf("unmarshal error: %s", err)
+	}
+
+	expect := "50b0df8443af29f0cf81dd4b27823fb41aabf3201d14cc3da8019050f5b8a967"
+	actual := hex.EncodeToString(tx.Hash)
+	if actual != expect {
+		t.Fatalf("expect hash is %s, actual is %s", expect, actual)
+	}
 }
 
 func newTransaction() (*model.Transaction, error) {
@@ -108,6 +126,12 @@ func newTransaction() (*model.Transaction, error) {
 		Outs:      outs,
 		Timestamp: time.Now(),
 	}
+
+	hash, err := tx.ComputeHash()
+	if err != nil {
+		return nil, err
+	}
+	tx.Hash = hash
 
 	return tx, nil
 }

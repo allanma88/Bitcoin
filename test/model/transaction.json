@@ -1,0 +1,18 @@
+{
+    "hash": "50b0df8443af29f0cf81dd4b27823fb41aabf3201d14cc3da8019050f5b8a967",
+    "in_len": 1,
+    "out_len": 1,
+    "ins": [
+        {
+            "prevHash": "85738f8f9a7f1b04b5329c590ebcb9e425925c6d0984089c43a022de4f19c281",
+            "signature": "MEYCIQDatT1CjoSWNvSdaxrHfcrBIbpMmrj65IYeSzKJ8X93LwIhAKHbOh0citwoCshF3HlzyqjXTxzWbmbd0LzxQVISvj/0"
+        }
+    ],
+    "outs": [
+        {
+            "pubkey": "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMjVYZWpwQktkZzcvSlo3WW5zeCsxWjU4MDhTVwpYQzRiRWFGeHltUFpHVXNsY084aTdlSUhpOGZ2Z2IyNGZUTER3aWJFdW5ydHhBQXJHak1lZEt5YzRnPT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg",
+            "value": 1
+        }
+    ],
+    "timestamp": "2023-11-01T19:01:59.532288613+08:00"
+}
