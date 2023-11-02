@@ -94,29 +94,30 @@ func (block *Block) UnmarshalJSON(data []byte) error {
 
 func BlockFrom(request *protocol.BlockReq) (*Block, error) {
 	var block Block
+	var tree merkle.MerkleTree
 
-	err := json.Unmarshal(request.Content, block.Body)
+	err := json.Unmarshal(request.Content, &tree)
 	if err != nil {
 		return nil, err
 	}
+	block.Body = &tree
 
 	automapper.MapLoose(request, &block)
 	block.Time = time.UnixMilli(request.Timestamp)
 	return &block, nil
 }
 
-func BlockTo(block *Block, nodes []string) (*protocol.BlockReq, error) {
-	content, err := json.Marshal(block.Body)
-	if err != nil {
-		return nil, err
-	}
-
+func BlockTo(block *Block) (*protocol.BlockReq, error) {
 	var request protocol.BlockReq
 	automapper.MapLoose(block, &request)
 	request.Timestamp = block.Time.UnixMilli()
 
-	request.Content = content
-	request.Nodes = nodes
+	body, err := json.Marshal(block.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	request.Content = body
 	return &request, nil
 }
 

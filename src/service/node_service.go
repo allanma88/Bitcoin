@@ -81,11 +81,12 @@ func (service *NodeService) SendTx(tx *model.Transaction) {
 
 func (service *NodeService) SendBlock(block *model.Block) {
 	addrs := service.RandomPick(model.MaxBroadcastNodes)
-	req, err := model.BlockTo(block, addrs)
+	req, err := model.BlockTo(block)
 	if err != nil {
 		log.Printf("convert to block request error: %v", err)
 		return
 	}
+	req.Nodes = addrs
 
 	send := func(cli client.IBitcoinClient, req *protocol.BlockReq) error {
 		_, err := cli.SendBlock(req)
