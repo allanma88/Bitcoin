@@ -63,26 +63,26 @@ func (db *BaseDB[T]) Last(prefix []byte, n int) ([]*T, error) {
 	opt := &opt.ReadOptions{}
 	slice := util.BytesPrefix(prefix)
 	iterator := db.Database.NewIterator(slice, opt)
-	vals := make([]*T, 0, n)
 
+	vals := make([]*T, n)
 	if iterator.Last() {
-		for i := 0; i < n; i++ {
+		for i := n - 1; i >= 0; i-- {
 			data := iterator.Value()
-
 			var val T
 			err := json.Unmarshal(data, &val)
 			if err != nil {
 				return nil, err
 			}
-			vals = append([]*T{&val}, vals...)
+			vals[i] = &val
 
 			if !iterator.Prev() {
 				break
 			}
 		}
+		return vals, nil
 	}
 
-	return vals, nil
+	return nil, nil
 }
 
 func (db *BaseDB[T]) Close() error {

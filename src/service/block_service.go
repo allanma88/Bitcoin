@@ -44,12 +44,23 @@ func (service *BlockService) MakeBlock(transactions []*model.Transaction) (*mode
 		return nil, err
 	}
 
-	difficulty, err := service.FindDifficulty()
+	lastBlocks, err := service.blockDB.LastBlocks(int(service.cfg.AjustBlockNum))
+	if err != nil {
+		return nil, err
+	}
+
+	var id uint64 = 1
+	if len(lastBlocks) > 0 {
+		id = lastBlocks[len(lastBlocks)-1].Id + 1
+	}
+
+	difficulty, err := service.FindDifficulty(lastBlocks)
 	if err != nil {
 		return nil, err
 	}
 
 	block := &model.Block{
+		Id:         id,
 		RootHash:   content.Table[len(content.Table)-1][0].Hash,
 		Difficulty: difficulty,
 		Time:       time.Now().UTC(),
@@ -85,17 +96,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return err
 	}
 
-	if block.Prevhash != nil {
-		prev, err := service.blockDB.GetBlock(block.Prevhash)
-		if err != nil {
-			return err
-		}
-		if prev == nil {
-			return errors.ErrBlockNotFound
-		}
-	}
-
-	existBlock, err := service.blockDB.GetBlock(hash)
+	existBlock, err := service.blockDB.GetBlock(block.Id, hash)
 	if err != nil {
 		return err
 	}
@@ -116,12 +117,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 	return nil
 }
 
-func (service *BlockService) FindDifficulty() (float64, error) {
-	lastBlocks, err := service.blockDB.LastBlocks(int(service.cfg.AjustBlockNum))
-	if err != nil {
-		return 0, err
-	}
-
+func (service *BlockService) FindDifficulty(lastBlocks []*model.Block) (float64, error) {
 	if len(lastBlocks) == 0 {
 		return model.ComputeDifficulty(model.MakeDifficulty(int(service.cfg.InitDifficulty))), nil
 	}

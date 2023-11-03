@@ -5,9 +5,11 @@ import (
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
+	"Bitcoin/test"
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -15,8 +17,54 @@ import (
 	"time"
 )
 
+type testBlock struct {
+	Id         uint64    `json:"id,omitempty"`
+	Hash       string    `json:"hash,omitempty"`
+	Prevhash   string    `json:"prevhash,omitempty"`
+	RootHash   string    `json:"roothash,omitempty"`
+	Nonce      uint32    `json:"nonce,omitempty"`
+	Difficulty string    `json:"difficulty,omitempty"`
+	Timestamp  time.Time `json:"timestamp,omitempty"`
+}
+
+func (s *testBlock) equal(block *model.Block) (bool, string, string, string) {
+	if block.Id != s.Id {
+		return false, "id", fmt.Sprintf("%d", s.Id), fmt.Sprintf("%d", block.Id)
+	}
+
+	actualHash := hex.EncodeToString(block.Hash)
+	if actualHash != s.Hash {
+		return false, "hash", s.Hash, actualHash
+	}
+
+	actualPrevHash := hex.EncodeToString(block.Prevhash)
+	if actualPrevHash != s.Prevhash {
+		return false, "prevhash", s.Prevhash, actualPrevHash
+	}
+
+	actualRootHash := hex.EncodeToString(block.RootHash)
+	if actualRootHash != s.RootHash {
+		return false, "roothash", s.RootHash, actualRootHash
+	}
+
+	if s.Nonce != block.Nonce {
+		return false, "nonce", fmt.Sprintf("%d", s.Nonce), fmt.Sprintf("%d", block.Nonce)
+	}
+
+	expectDifficulty, _ := strconv.ParseFloat(s.Difficulty, 64)
+	if expectDifficulty != block.Difficulty {
+		return false, "difficulty", fmt.Sprintf("%.0f", expectDifficulty), fmt.Sprintf("%.0f", block.Difficulty)
+	}
+
+	if s.Timestamp.UnixMilli() != block.Time.UnixMilli() {
+		return false, "timestamp", fmt.Sprintf("%v", s.Timestamp), fmt.Sprintf("%v", block.Time)
+	}
+
+	return true, "", "", ""
+}
+
 func Test_Block_ComputeHash_Hash_Not_Change(t *testing.T) {
-	block, err := newBlock()
+	block, err := test.NewBlock(1, 10)
 	if err != nil {
 		t.Fatalf("new block error: %v", err)
 	}
@@ -27,14 +75,14 @@ func Test_Block_ComputeHash_Hash_Not_Change(t *testing.T) {
 	}
 
 	if bytes.Equal(hash, block.Hash) {
-		t.Log("transaction hash didn't changed after serialize")
+		t.Log("block hash didn't changed after serialize")
 	} else {
-		t.Fatalf("transaction hash is changed from [%x] to [%x]", block.Hash, hash)
+		t.Fatalf("block hash is changed from [%x] to [%x]", block.Hash, hash)
 	}
 }
 
 func Test_Block_Marshal(t *testing.T) {
-	block, err := newBlock()
+	block, err := test.NewBlock(1, 10)
 	if err != nil {
 		t.Fatalf("new block error: %v", err)
 	}
@@ -45,6 +93,17 @@ func Test_Block_Marshal(t *testing.T) {
 	}
 
 	t.Logf("json: %s", string(data))
+
+	var s testBlock
+	err = json.Unmarshal(data, &s)
+	if err != nil {
+		t.Fatalf("unmarshal error: %s", err)
+	}
+
+	same, field, expect, actual := s.equal(block)
+	if !same {
+		t.Fatalf("%s mismatch, expect: %s actual: %s", field, expect, actual)
+	}
 }
 
 func Test_Block_Unmarshal(t *testing.T) {
@@ -53,21 +112,21 @@ func Test_Block_Unmarshal(t *testing.T) {
 		t.Fatalf("read file error: %s", err)
 	}
 
+	var s testBlock
+	err = json.Unmarshal(data, &s)
+	if err != nil {
+		t.Fatalf("unmarshal error: %s", err)
+	}
+
 	var block model.Block
 	err = json.Unmarshal(data, &block)
 	if err != nil {
 		t.Fatalf("unmarshal error: %s", err)
 	}
 
-	expectHash := "236309f506a54077d267ec48dc49c4bbafca8b9782d3e03b09fd24157dc2788b"
-	actualHash := hex.EncodeToString(block.Hash)
-	if actualHash != expectHash {
-		t.Fatalf("expect hash is %s, actual is %s", expectHash, actualHash)
-	}
-
-	expectDifficulty, _ := strconv.ParseFloat("4097519688046410717622170652225431290464303836039125771621162712638162707939328", 64)
-	if expectDifficulty != block.Difficulty {
-		t.Fatalf("expect difficulty is %f, actual is %f", expectDifficulty, block.Difficulty)
+	same, field, expect, actual := s.equal(&block)
+	if !same {
+		t.Fatalf("%s mismatch, expect: %s actual: %s", field, expect, actual)
 	}
 }
 
@@ -108,13 +167,19 @@ func Test_Block_From(t *testing.T) {
 		t.Fatalf("block from err: %v", err)
 	}
 
-	if !equal(req, block) {
-		t.Fatalf("block req %x is not equal with block %x", req.Hash, block.Hash)
+	rootHash := block.Body.Table[len(block.Body.Table)-1][0].Hash
+	if !bytes.Equal(rootHash, block.RootHash) {
+		log.Fatalf("block root hash mismatch, expect: %x, actual: %x", block.RootHash, rootHash)
+	}
+
+	same, field, expect, actual := equal(req, block)
+	if !same {
+		t.Fatalf("%s mismatch, expect: %s actual: %s", field, expect, actual)
 	}
 }
 
 func Test_Block_To(t *testing.T) {
-	block, err := newBlock()
+	block, err := test.NewBlock(1, 10)
 	if err != nil {
 		t.Fatalf("new block err: %v", err)
 	}
@@ -124,14 +189,26 @@ func Test_Block_To(t *testing.T) {
 		t.Fatalf("block to err: %v", err)
 	}
 
-	if !equal(req, block) {
-		t.Fatalf("block req %x is not equal with block %x", req.Hash, block.Hash)
+	var tree merkle.MerkleTree
+	err = json.Unmarshal(req.Content, &tree)
+	if err != nil {
+		log.Fatalf("unmarshal tree error: %v", err)
+	}
+
+	rootHash := tree.Table[len(tree.Table)-1][0].Hash
+	if !bytes.Equal(rootHash, req.RootHash) {
+		log.Fatalf("block req root hash mismatch, expect: %x, actual: %x", req.RootHash, rootHash)
+	}
+
+	same, field, expect, actual := equal(req, block)
+	if !same {
+		t.Fatalf("%s mismatch, expect: %s actual: %s", field, expect, actual)
 	}
 }
 
 func Test_Block_FindHash(t *testing.T) {
 	z := 10
-	block, err := newBlock1(z)
+	block, err := newBlock(z)
 	if err != nil {
 		t.Fatalf("new block err: %v", err)
 	}
@@ -151,38 +228,7 @@ func Test_Block_FindHash(t *testing.T) {
 	}
 }
 
-func newBlock() (*model.Block, error) {
-	prevHash, err := cryptography.Hash("prev")
-	if err != nil {
-		return nil, err
-	}
-
-	tree, err := merkle.BuildTree[string]([]string{"Hello1", "Hello2"})
-	if err != nil {
-		return nil, err
-	}
-
-	rootHash := tree.Table[len(tree.Table)-1][0].Hash
-
-	block := &model.Block{
-		Id:         1,
-		Prevhash:   prevHash,
-		RootHash:   rootHash,
-		Difficulty: model.ComputeDifficulty(model.MakeDifficulty(10)),
-		Time:       time.Now(),
-		Body:       tree,
-	}
-
-	hash, err := block.FindHash()
-	if err != nil {
-		return nil, err
-	}
-	block.Hash = hash
-
-	return block, nil
-}
-
-func newBlock1(z int) (*model.Block, error) {
+func newBlock(z int) (*model.Block, error) {
 	prevHash, err := cryptography.Hash("prev")
 	if err != nil {
 		return nil, err
@@ -245,46 +291,34 @@ func newBlockReq() (*protocol.BlockReq, error) {
 	return block, nil
 }
 
-func equal(req *protocol.BlockReq, block *model.Block) bool {
-	if req.Id != block.Id {
-		return false
+func equal(req *protocol.BlockReq, block *model.Block) (bool, string, string, string) {
+	if block.Id != req.Id {
+		return false, "id", fmt.Sprintf("%d", req.Id), fmt.Sprintf("%d", block.Id)
 	}
 
-	if !bytes.Equal(req.Hash, block.Hash) {
-		return false
+	if !bytes.Equal(block.Hash, req.Hash) {
+		return false, "hash", hex.EncodeToString(req.Hash), hex.EncodeToString(block.Hash)
 	}
 
-	if !bytes.Equal(req.Prevhash, block.Prevhash) {
-		return false
+	if !bytes.Equal(block.Prevhash, req.Prevhash) {
+		return false, "prevhash", hex.EncodeToString(req.Prevhash), hex.EncodeToString(block.Prevhash)
 	}
 
-	if !bytes.Equal(req.RootHash, block.RootHash) {
-		return false
+	if !bytes.Equal(block.RootHash, req.RootHash) {
+		return false, "rootHash", hex.EncodeToString(req.RootHash), hex.EncodeToString(block.RootHash)
 	}
 
 	if req.Nonce != block.Nonce {
-		return false
+		return false, "nonce", fmt.Sprintf("%d", req.Nonce), fmt.Sprintf("%d", block.Nonce)
 	}
 
 	if req.Difficulty != block.Difficulty {
-		return false
+		return false, "difficulty", fmt.Sprintf("%.0f", req.Difficulty), fmt.Sprintf("%.0f", block.Difficulty)
 	}
 
 	if req.Timestamp != block.Time.UnixMilli() {
-		return false
+		return false, "timestamp", fmt.Sprintf("%v", req.Timestamp), fmt.Sprintf("%v", block.Time)
 	}
 
-	var tree merkle.MerkleTree
-	err := json.Unmarshal(req.Content, &tree)
-	if err != nil {
-		log.Fatalf("unmarshal tree error: %v", err)
-	}
-
-	rootHash := tree.Table[len(tree.Table)-1][0].Hash
-	rootHash1 := block.Body.Table[len(block.Body.Table)-1][0].Hash
-	if !bytes.Equal(rootHash, rootHash1) {
-		return false
-	}
-
-	return true
+	return true, "", "", ""
 }

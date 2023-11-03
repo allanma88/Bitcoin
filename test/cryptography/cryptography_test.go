@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func Test_Hash_Field_Order_Doesnot_Matter(t *testing.T) {
+func Test_Tx_Hash_Field_Order_Doesnot_Matter(t *testing.T) {
 	timestamp := time.Now()
 	tx1 := &model.Transaction{
 		InLen:     1,
@@ -31,6 +31,47 @@ func Test_Hash_Field_Order_Doesnot_Matter(t *testing.T) {
 		t.Log("Field order is not matter when serialize")
 	} else {
 		t.Fatalf("hash is not equal: %x != %x", hash1, hash2)
+	}
+}
+
+func Test_Block_Hash_Field_Order_Doesnot_Matter(t *testing.T) {
+	hash, err := cryptography.Hash("whatever")
+	if err != nil {
+		t.Fatalf("hash string error: %v", err)
+	}
+	timestamp := time.Now()
+	difficulty := model.ComputeDifficulty(model.MakeDifficulty(10))
+
+	block1 := &model.Block{
+		Id:         1,
+		Prevhash:   hash,
+		RootHash:   hash,
+		Difficulty: difficulty,
+		Time:       timestamp,
+	}
+
+	block2 := &model.Block{
+		RootHash:   hash,
+		Prevhash:   hash,
+		Time:       timestamp,
+		Id:         1,
+		Difficulty: difficulty,
+	}
+
+	hash1, err := cryptography.Hash(block1)
+	if err != nil {
+		t.Fatalf("hash block1 error: %v", err)
+	}
+
+	hash2, err := cryptography.Hash(block2)
+	if err != nil {
+		t.Fatalf("hash block2 error: %v", err)
+	}
+
+	if bytes.Equal(hash1, hash2) {
+		t.Log("Field order is not matter when serialize")
+	} else {
+		t.Fatalf("block1 %x != block2 %x", hash1, hash2)
 	}
 }
 

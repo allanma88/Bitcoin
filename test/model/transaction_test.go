@@ -15,7 +15,7 @@ import (
 )
 
 func Test_Transaction_ComputeHash_Hash_Not_Change(t *testing.T) {
-	tx, err := newTransaction()
+	tx, err := test.NewTransaction()
 	if err != nil {
 		t.Fatalf("new transaction error: %v", err)
 	}
@@ -46,7 +46,7 @@ func Test_Transaction_From(t *testing.T) {
 }
 
 func Test_Transaction_To(t *testing.T) {
-	tx, err := newTransaction()
+	tx, err := test.NewTransaction()
 	if err != nil {
 		t.Fatalf("new transaction request error: %s", err)
 	}
@@ -59,7 +59,7 @@ func Test_Transaction_To(t *testing.T) {
 }
 
 func Test_Transaction_Marshal(t *testing.T) {
-	tx, err := newTransaction()
+	tx, err := test.NewTransaction()
 	if err != nil {
 		t.Fatalf("new transaction error: %s", err)
 	}
@@ -88,52 +88,6 @@ func Test_Transaction_Unmarshal(t *testing.T) {
 	if actual != expect {
 		t.Fatalf("expect hash is %s, actual is %s", expect, actual)
 	}
-}
-
-func newTransaction() (*model.Transaction, error) {
-	privkey, pubkey, err := test.NewKeys()
-	if err != nil {
-		return nil, err
-	}
-
-	prevHash, err := cryptography.Hash("whatever")
-	if err != nil {
-		return nil, err
-	}
-
-	sig, err := cryptography.Sign(privkey, prevHash)
-	if err != nil {
-		return nil, err
-	}
-
-	ins := []*model.In{
-		{
-			PrevHash:  prevHash,
-			Index:     0,
-			Signature: sig,
-		},
-	}
-
-	outs := []*model.Out{{
-		Pubkey: pubkey,
-		Value:  1,
-	}}
-
-	tx := &model.Transaction{
-		InLen:     uint32(len(ins)),
-		OutLen:    uint32(len(outs)),
-		Ins:       ins,
-		Outs:      outs,
-		Timestamp: time.Now(),
-	}
-
-	hash, err := tx.ComputeHash()
-	if err != nil {
-		return nil, err
-	}
-	tx.Hash = hash
-
-	return tx, nil
 }
 
 func newTransactionReq() (*protocol.TransactionReq, error) {

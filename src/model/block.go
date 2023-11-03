@@ -58,12 +58,12 @@ func (block *Block) UnmarshalJSON(data []byte) error {
 		Timestamp  time.Time `json:"timestamp,omitempty"`
 	}
 
-	block.Id = s.Id
-
 	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
 	}
+
+	block.Id = s.Id
 
 	block.Hash, err = hex.DecodeString(s.Hash)
 	if err != nil {
