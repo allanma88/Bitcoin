@@ -137,12 +137,12 @@ func Test_Difficulty(t *testing.T) {
 		t.Fatalf("compute hash err: %v", err)
 	}
 
-	for z := 1; z <= 5; z++ {
+	for z := uint64(1); z <= 5; z++ {
 		difficulty := bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(z))
 		log.Printf("difficulty: %x", difficulty)
 
 		for k := z; k < z+5; k++ {
-			for i := 0; i < k; i++ {
+			for i := uint64(0); i < k; i++ {
 				p := i / 8
 				q := 7 - i%8
 				hash[p] = (hash[p] | (1 << q)) ^ (1 << q)
@@ -208,7 +208,7 @@ func Test_Block_To(t *testing.T) {
 }
 
 func Test_Block_FindHash(t *testing.T) {
-	z := 10
+	var z uint64 = 10
 	block, err := newBlock(z)
 	if err != nil {
 		t.Fatalf("new block err: %v", err)
@@ -229,7 +229,7 @@ func Test_Block_FindHash(t *testing.T) {
 	}
 }
 
-func newBlock(z int) (*model.Block, error) {
+func newBlock(z uint64) (*model.Block, error) {
 	prevHash, err := cryptography.Hash("prev")
 	if err != nil {
 		return nil, err

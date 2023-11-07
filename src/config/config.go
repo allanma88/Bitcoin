@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/peteprogrammer/go-automapper"
 	"gopkg.in/yaml.v2"
@@ -14,19 +13,19 @@ import (
 const (
 	DefaultBlocksPerDifficulty = 2016
 	DefaultBlocksPerRewrad     = 210 * 1000
-	DefaultBlockInterval       = 1 * time.Minute
-	DefaultInitDifficulty      = 8
+	DefaultBlockInterval       = 60
+	DefaultInitDifficultyLevel = 8
 )
 
 type Config struct {
-	DataDir             string        `yaml:"data_dir,omitempty"`
-	Endpoint            string        `yaml:"endpoint,omitempty"`
-	Bootstraps          []string      `yaml:"bootstraps,omitempty"`
-	BlocksPerDifficulty uint32        `yaml:"blocks_per_difficulty,omitempty"` //TODO: switch to int
-	BlocksPerRewrad     uint32        `yaml:"blocks_per_reward,omitempty"`     //TODO: switch to int
-	BlockInterval       time.Duration `yaml:"block_interval,omitempty"`
-	InitDifficulty      int           `yaml:"init_difficulty,omitempty"`
-	MinerPubkey         []byte        `yaml:"miner_address,omitempty"`
+	DataDir             string   `yaml:"data_dir,omitempty"`
+	Endpoint            string   `yaml:"endpoint,omitempty"`
+	Bootstraps          []string `yaml:"bootstraps,omitempty"`
+	BlocksPerDifficulty uint64   `yaml:"blocks_per_difficulty,omitempty"` //TODO: switch to int
+	BlocksPerRewrad     uint64   `yaml:"blocks_per_reward,omitempty"`     //TODO: switch to int
+	BlockInterval       uint64   `yaml:"block_interval,omitempty"`
+	InitDifficultyLevel uint64   `yaml:"init_difficulty_level,omitempty"`
+	MinerPubkey         []byte   `yaml:"miner_address,omitempty"`
 }
 
 // TODO: need more test cases
@@ -37,14 +36,14 @@ func Read(path string) (*Config, error) {
 	}
 
 	var s struct {
-		DataDir             string        `yaml:"data_dir,omitempty"`
-		Endpoint            string        `yaml:"endpoint,omitempty"`
-		Bootstraps          []string      `yaml:"bootstraps,omitempty"`
-		BlocksPerDifficulty uint32        `yaml:"blocks_per_difficulty,omitempty"`
-		BlocksPerRewrad     uint32        `yaml:"blocks_per_reward,omitempty"`
-		BlockInterval       time.Duration `yaml:"block_interval,omitempty"`
-		InitDifficulty      int           `yaml:"init_difficulty,omitempty"`
-		MinerAddress        string        `yaml:"miner_address,omitempty"`
+		DataDir             string   `yaml:"data_dir,omitempty"`
+		Endpoint            string   `yaml:"endpoint,omitempty"`
+		Bootstraps          []string `yaml:"bootstraps,omitempty"`
+		BlocksPerDifficulty uint64   `yaml:"blocks_per_difficulty,omitempty"`
+		BlocksPerRewrad     uint64   `yaml:"blocks_per_reward,omitempty"`
+		BlockInterval       uint64   `yaml:"block_interval,omitempty"`
+		InitDifficultyLevel uint64   `yaml:"init_difficulty_level,omitempty"`
+		MinerAddress        string   `yaml:"miner_address,omitempty"`
 	}
 	err = yaml.Unmarshal(file, &s)
 	if err != nil {
@@ -72,12 +71,12 @@ func Read(path string) (*Config, error) {
 		config.BlocksPerRewrad = DefaultBlocksPerRewrad
 	}
 
-	if config.BlockInterval == time.Duration(0) {
+	if config.BlockInterval == 0 {
 		config.BlockInterval = DefaultBlockInterval
 	}
 
-	if config.InitDifficulty == 0 {
-		config.InitDifficulty = DefaultInitDifficulty
+	if config.InitDifficultyLevel == 0 {
+		config.InitDifficultyLevel = DefaultInitDifficultyLevel
 	}
 
 	pubkey, err := base64.RawStdEncoding.DecodeString(s.MinerAddress)

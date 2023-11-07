@@ -73,7 +73,7 @@ func NewTransaction() (*model.Transaction, error) {
 	return tx, nil
 }
 
-func NewBlock(id uint64, z int) (*model.Block, error) {
+func NewBlock(id uint64, z uint64) (*model.Block, error) {
 	prevHash, err := cryptography.Hash("prev")
 	if err != nil {
 		return nil, err

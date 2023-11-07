@@ -29,7 +29,7 @@ func Test_Validate_Succeed(t *testing.T) {
 	t.Logf("Block %x validate succeed", block.Hash)
 }
 
-func makeBlock(difficultyLevel int) (*model.Block, error) {
+func makeBlock(difficultyLevel uint64) (*model.Block, error) {
 	vals := make([]string, 5)
 	for i := 0; i < len(vals); i++ {
 		vals[i] = fmt.Sprintf("Hello%d", (i + 1))

@@ -42,7 +42,7 @@ func NewBitcoinServer(cfg *config.Config) (*BitcoinServer, error) {
 	blockdb := database.NewBlockDB(db)
 	blockContentDb := database.NewBlockContentDB(db)
 	state := &bitcoin.State{
-		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(cfg.InitDifficulty)),
+		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(cfg.InitDifficultyLevel)),
 	}
 	server := &BitcoinServer{
 		lock:                sync.Mutex{},
@@ -147,18 +147,18 @@ func (s *BitcoinServer) BroadcastBlock() {
 func (s *BitcoinServer) ReceiveBlock() {
 	for {
 		s.lock.Lock()
-		if (s.LastBlockId+1)%uint64(s.cfg.BlocksPerDifficulty+1) == 0 {
+		if (s.LastBlockId+1)%(s.cfg.BlocksPerDifficulty+1) == 0 {
 			s.TotalInterval = 0
 		}
 		s.lock.Unlock()
 
 		var prevBlock *model.Block = nil //TODO: how to handle when server is restart
-		for i := 0; i < int(s.cfg.BlocksPerDifficulty); i++ {
+		for i := uint64(0); i < s.cfg.BlocksPerDifficulty; i++ {
 			block := <-s.blockBroadcastQueue
 
 			if prevBlock != nil {
 				s.lock.Lock()
-				s.TotalInterval += block.Time.Sub(prevBlock.Time)
+				s.TotalInterval += uint64(block.Time.Sub(prevBlock.Time).Milliseconds())
 				s.lock.Unlock()
 			}
 
@@ -177,7 +177,7 @@ func (s *BitcoinServer) MineBlock() {
 		}
 
 		s.lock.Lock()
-		bitcoin.AdjustDifficulty(s.State, int(s.cfg.BlocksPerDifficulty), s.cfg.BlockInterval)
+		bitcoin.AdjustDifficulty(s.State, s.cfg.BlocksPerDifficulty, s.cfg.BlockInterval)
 		s.lock.Unlock()
 
 		block, err := s.BlockService.MineBlock(s.LastBlockId+1, s.Difficulty, txs)
@@ -206,7 +206,7 @@ func (s *BitcoinServer) receiveTxs() ([]*model.Transaction, error) {
 		totalFee += txs[i].Fee
 	}
 
-	reward := bitcoin.ComputeReward(s.LastBlockId, int(s.cfg.BlocksPerRewrad))
+	reward := bitcoin.ComputeReward(s.LastBlockId, s.cfg.BlocksPerRewrad)
 	coinbaseTx, err := model.MakeCoinbaseTx(s.cfg.MinerPubkey, reward+totalFee)
 	if err != nil {
 		return nil, err

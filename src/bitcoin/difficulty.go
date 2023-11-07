@@ -2,7 +2,6 @@ package bitcoin
 
 import (
 	"math"
-	"time"
 )
 
 func ComputeDifficulty(hash []byte) float64 {
@@ -16,22 +15,22 @@ func ComputeDifficulty(hash []byte) float64 {
 	return n
 }
 
-func MakeDifficulty(z int) []byte {
+func MakeDifficulty(level uint64) []byte {
 	difficulty := make([]byte, 32)
 	for i := 0; i < 32; i++ {
 		difficulty[i] = 255
 	}
-	for i := 0; i < z; i++ {
-		p := i / 8
-		q := 7 - i%8
+	for z := uint64(0); z < level; z++ {
+		p := z / 8
+		q := 7 - z%8
 		difficulty[p] = difficulty[p] ^ (1 << q)
 	}
 	return difficulty
 }
 
-func AdjustDifficulty(state *State, blocksPerDifficulty int, blockInterval time.Duration) {
-	if (state.LastBlockId+1)%uint64(blocksPerDifficulty+1) == 0 {
-		avgInterval := state.TotalInterval.Milliseconds() / int64(blocksPerDifficulty)
-		state.Difficulty = state.Difficulty * float64((avgInterval / blockInterval.Milliseconds()))
+func AdjustDifficulty(state *State, blocksPerDifficulty uint64, blockInterval uint64) {
+	if (state.LastBlockId+1)%(blocksPerDifficulty+1) == 0 {
+		avgInterval := state.TotalInterval / (blocksPerDifficulty)
+		state.Difficulty = state.Difficulty * float64((avgInterval / blockInterval))
 	}
 }

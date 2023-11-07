@@ -24,7 +24,7 @@ func Test_Read(t *testing.T) {
 		t.Fatalf("default BlockDuration should be %v, actual: %v", config.DefaultBlockInterval, cfg.BlockInterval)
 	}
 
-	if cfg.InitDifficulty != config.DefaultInitDifficulty {
-		t.Fatalf("default InitDifficulty should be %v, actual: %v", config.DefaultInitDifficulty, cfg.InitDifficulty)
+	if cfg.InitDifficultyLevel != config.DefaultInitDifficultyLevel {
+		t.Fatalf("default InitDifficulty should be %v, actual: %v", config.DefaultInitDifficultyLevel, cfg.InitDifficultyLevel)
 	}
 }

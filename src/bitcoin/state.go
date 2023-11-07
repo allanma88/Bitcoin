@@ -1,9 +1,7 @@
 package bitcoin
 
-import "time"
-
 type State struct {
-	TotalInterval time.Duration
+	TotalInterval uint64
 	Difficulty    float64
 	LastBlockId   uint64
 }
