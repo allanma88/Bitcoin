@@ -26,8 +26,8 @@ func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockCo
 	}
 }
 
-func (serv *BlockService) MineBlock(id uint64, difficulty float64, transactions []*model.Transaction) (*model.Block, error) {
-	block, err := serv.MakeBlock(id, difficulty, transactions)
+func (serv *BlockService) MineBlock(lastBlockId uint64, difficulty float64, transactions []*model.Transaction) (*model.Block, error) {
+	block, err := serv.MakeBlock(lastBlockId+1, difficulty, transactions)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +103,7 @@ func (service *BlockService) MakeBlock(id uint64, difficulty float64, transactio
 	return block, nil
 }
 
+// TODO: still need?
 func (service *BlockService) LastBlocks(n int) ([]*model.Block, error) {
 	return service.blockDB.LastBlocks(n)
 }

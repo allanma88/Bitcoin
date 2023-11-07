@@ -27,10 +27,3 @@ func MakeDifficulty(level uint64) []byte {
 	}
 	return difficulty
 }
-
-func AdjustDifficulty(state *State, blocksPerDifficulty uint64, blockInterval uint64) {
-	if (state.LastBlockId+1)%(blocksPerDifficulty+1) == 0 {
-		avgInterval := state.TotalInterval / (blocksPerDifficulty)
-		state.Difficulty = state.Difficulty * float64((avgInterval / blockInterval))
-	}
-}

@@ -37,7 +37,7 @@ func main() {
 	go server.MineBlock()
 	go server.BroadcastTx()
 	go server.BroadcastBlock()
-	go server.ReceiveBlock()
+	go server.UpdateState()
 
 	protocol.RegisterTransactionServer(register, server)
 	log.Printf("server listening at %v", listener.Addr())
