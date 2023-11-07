@@ -18,7 +18,7 @@ func Test_SendTx_Check_Nodes(t *testing.T) {
 	makeclient := func(channel TxChannel) client.IBitcoinClient {
 		return &TestBitcoinClient{txChannel: channel}
 	}
-	nodes := generateNodes(model.MaxBroadcastNodes+5, 5001, channels, makeclient)
+	nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 
 	tx, err := newTransaction()
 	if err != nil {
@@ -49,10 +49,10 @@ func Test_SendTx_Not_Remove_Failed_Not_Enough_Nodes(t *testing.T) {
 		return &FailedBitcoinClient{txChannel: channel}
 	}
 
-	sendCounts := []int{model.MaxFailedCount - 2, model.MaxFailedCount - 1, model.MaxFailedCount - 5}
+	sendCounts := []int{service.MaxFailedCount - 2, service.MaxFailedCount - 1, service.MaxFailedCount - 5}
 	for _, sendCount := range sendCounts {
 		channels := make(map[string]TxChannel)
-		nodes := generateNodes(model.MaxBroadcastNodes+5, 5001, channels, makeclient)
+		nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 		failNodes := generateNodes(2, 6001, channels, makeFailedClient)
 
 		cfg := &config.Config{
@@ -96,10 +96,10 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 		return &FailedBitcoinClient{txChannel: channel}
 	}
 
-	sendCounts := []int{model.MaxFailedCount, model.MaxFailedCount + 1, model.MaxFailedCount + 10}
+	sendCounts := []int{service.MaxFailedCount, service.MaxFailedCount + 1, service.MaxFailedCount + 10}
 	for _, sendCount := range sendCounts {
 		channels := make(map[string]TxChannel)
-		nodes := generateNodes(model.MaxBroadcastNodes+5, 5001, channels, makeclient)
+		nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 		failNodes := generateNodes(2, 6001, channels, makeFailedClient)
 
 		cfg := &config.Config{
@@ -123,7 +123,7 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 			}
 
 			expect := len(channels)
-			if i >= model.MaxFailedCount {
+			if i >= service.MaxFailedCount {
 				expect = len(channels) - len(failNodes)
 			}
 
@@ -150,7 +150,7 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 	}
 
 	channels := make(map[string]TxChannel)
-	nodes := generateNodes(model.MaxBroadcastNodes+5, 5001, channels, makeclient)
+	nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 	probablyFailNodes := generateNodes(2, 6001, channels, makeProbablyFailedClient)
 
 	cfg := &config.Config{
@@ -165,7 +165,7 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 		t.Fatalf("new transaction error: %s", err)
 	}
 
-	for i := 0; i < model.MaxFailedCount*2; i++ {
+	for i := 0; i < service.MaxFailedCount*2; i++ {
 		serv.SendTx(tx)
 
 		_, err := checkNodes(channels, cfg.Endpoint)
@@ -187,13 +187,13 @@ func Test_RandomPick(t *testing.T) {
 		Endpoint: "localhost:5000",
 	}
 	serv := service.NewNodeService(cfg)
-	for i := 0; i < model.MaxBroadcastNodes+5; i++ {
+	for i := 0; i < service.MaxBroadcastNodes+5; i++ {
 		serv.AddNodes(&model.Node{Addr: fmt.Sprintf("localhost:%d", 5000+i+1)})
 	}
 
-	addrs := serv.RandomPick(model.MaxBroadcastNodes)
-	if len(addrs) != model.MaxBroadcastNodes+1 {
-		t.Fatalf("expect pick %v nodes, actual: %v", model.MaxBroadcastNodes+1, len(addrs))
+	addrs := serv.RandomPick(service.MaxBroadcastNodes)
+	if len(addrs) != service.MaxBroadcastNodes+1 {
+		t.Fatalf("expect pick %v nodes, actual: %v", service.MaxBroadcastNodes+1, len(addrs))
 	}
 
 	if addrs[0] != cfg.Endpoint {
@@ -269,8 +269,8 @@ func checkNodes(channels map[string]TxChannel, endpoint string) (int, error) {
 	for _, channel := range channels {
 		select {
 		case req := <-channel:
-			if len(req.Nodes) != model.MaxBroadcastNodes+1 {
-				return n, fmt.Errorf("the nodes size of transaction request are invalid, expect: %v, actual: %v", model.MaxBroadcastNodes+1, len(req.Nodes))
+			if len(req.Nodes) != service.MaxBroadcastNodes+1 {
+				return n, fmt.Errorf("the nodes size of transaction request are invalid, expect: %v, actual: %v", service.MaxBroadcastNodes+1, len(req.Nodes))
 			}
 
 			if req.Nodes[0] != endpoint {

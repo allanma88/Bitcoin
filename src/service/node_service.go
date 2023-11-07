@@ -12,6 +12,12 @@ import (
 	"sync"
 )
 
+const (
+	//node
+	MaxBroadcastNodes = 10
+	MaxFailedCount    = 10
+)
+
 //TODO: maybe we can use more complex policy to remove inactive nodes
 
 type NodeService struct {
@@ -67,7 +73,7 @@ func (service *NodeService) GetNode(addr string) *model.Node {
 }
 
 func (service *NodeService) SendTx(tx *model.Transaction) {
-	addrs := service.RandomPick(model.MaxBroadcastNodes)
+	addrs := service.RandomPick(MaxBroadcastNodes)
 	req := model.TransactionTo(tx)
 	req.Nodes = addrs
 
@@ -80,7 +86,7 @@ func (service *NodeService) SendTx(tx *model.Transaction) {
 }
 
 func (service *NodeService) SendBlock(block *model.Block) {
-	addrs := service.RandomPick(model.MaxBroadcastNodes)
+	addrs := service.RandomPick(MaxBroadcastNodes)
 	req, err := model.BlockTo(block)
 	if err != nil {
 		log.Printf("convert to block request error: %v", err)
@@ -107,7 +113,7 @@ func sendReq[T any](service *NodeService, req T, send sendFunc[T]) {
 			if err != nil {
 				log.Printf("sent transaction failed: %v", err)
 				n.Failed++
-				if n.Failed >= model.MaxFailedCount {
+				if n.Failed >= MaxFailedCount {
 					deleted = append(deleted, n.Addr)
 				}
 			} else {

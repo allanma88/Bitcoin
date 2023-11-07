@@ -15,7 +15,11 @@ import (
 )
 
 const (
-	InitReward = 50
+	InitReward              = 50
+	TxBroadcastQueueSize    = 10
+	BlockBroadcastQueueSize = 10
+	BlockQueueSize          = 10
+	MaxTxSizePerBlock       = 10
 )
 
 type BitcoinServer struct {
@@ -50,10 +54,10 @@ func NewBitcoinServer(cfg *config.Config) (*BitcoinServer, error) {
 		nodeService:         service.NewNodeService(cfg),
 		txService:           service.NewTransactionService(txdb),
 		BlockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
-		txBroadcastQueue:    make(chan *model.Transaction, model.TxBroadcastQueueSize),
-		blockQueue:          make(chan *model.Block, model.BlockBroadcastQueueSize),
-		blockBroadcastQueue: make(chan *model.Block, model.BlockBroadcastQueueSize),
-		mineQueue:           make(chan *model.Transaction, model.MaxTxSizePerBlock),
+		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
+		blockQueue:          make(chan *model.Block, BlockBroadcastQueueSize),
+		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
+		mineQueue:           make(chan *model.Transaction, MaxTxSizePerBlock),
 		State:               state,
 	}
 	return server, nil
@@ -199,9 +203,9 @@ func (s *BitcoinServer) MineBlock() {
 }
 
 func (s *BitcoinServer) receiveTxs() ([]*model.Transaction, error) {
-	txs := make([]*model.Transaction, model.MaxTxSizePerBlock)
+	txs := make([]*model.Transaction, MaxTxSizePerBlock)
 	var totalFee uint64 = 0
-	for i := 1; i < model.MaxTxSizePerBlock; i++ {
+	for i := 1; i < MaxTxSizePerBlock; i++ {
 		txs[i] = <-s.mineQueue
 		totalFee += txs[i].Fee
 	}
