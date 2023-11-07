@@ -1,6 +1,7 @@
 package model
 
 import (
+	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/merkle"
@@ -133,7 +134,7 @@ func (block *Block) FindHash() ([]byte, error) {
 			break
 		}
 
-		actual := ComputeDifficulty(hash)
+		actual := bitcoin.ComputeDifficulty(hash)
 		if actual <= block.Difficulty {
 			return hash, nil
 		}
@@ -150,28 +151,4 @@ func (block *Block) ComputeHash() ([]byte, error) {
 
 	block.Hash = originalHash
 	return hash, err
-}
-
-func ComputeDifficulty(hash []byte) float64 {
-	var n float64 = 0
-
-	for i := 0; i < len(hash); i++ {
-		n = n + float64(hash[i])
-		n = n * math.Pow(2, 8) //TODO: slow
-	}
-
-	return n
-}
-
-func MakeDifficulty(z int) []byte {
-	difficulty := make([]byte, 32)
-	for i := 0; i < 32; i++ {
-		difficulty[i] = 255
-	}
-	for i := 0; i < z; i++ {
-		p := i / 8
-		q := 7 - i%8
-		difficulty[p] = difficulty[p] ^ (1 << q)
-	}
-	return difficulty
 }

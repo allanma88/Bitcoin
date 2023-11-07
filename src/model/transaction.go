@@ -98,6 +98,7 @@ type Transaction struct {
 	OutLen    uint32    `json:"out_len,omitempty"`
 	Ins       []*In     `json:"ins,omitempty"`
 	Outs      []*Out    `json:"outs,omitempty"`
+	Fee       uint64    `json:"-,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
@@ -172,4 +173,27 @@ func (tx *Transaction) ComputeHash() ([]byte, error) {
 
 	tx.Hash = originalHash
 	return hash, err
+}
+
+func MakeCoinbaseTx(pubkey []byte, val uint64) (*Transaction, error) {
+	tx := &Transaction{
+		InLen:  0,
+		OutLen: 1,
+		Ins:    []*In{},
+		Outs: []*Out{
+			{
+				Pubkey: pubkey,
+				Value:  val,
+			},
+		},
+		Timestamp: time.Now(),
+	}
+
+	hash, err := tx.ComputeHash()
+	if err != nil {
+		return nil, err
+	}
+
+	tx.Hash = hash
+	return tx, nil
 }

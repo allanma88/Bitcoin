@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
@@ -25,8 +26,8 @@ func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockCo
 	}
 }
 
-func (serv *BlockService) MineBlock(transactions []*model.Transaction) (*model.Block, error) {
-	block, err := serv.MakeBlock(transactions)
+func (serv *BlockService) MineBlock(id uint64, difficulty float64, transactions []*model.Transaction) (*model.Block, error) {
+	block, err := serv.MakeBlock(id, difficulty, transactions)
 	if err != nil {
 		return nil, err
 	}
@@ -35,44 +36,6 @@ func (serv *BlockService) MineBlock(transactions []*model.Transaction) (*model.B
 	if err != nil {
 		return nil, err
 	}
-	return block, nil
-}
-
-func (service *BlockService) MakeBlock(transactions []*model.Transaction) (*model.Block, error) {
-	content, err := merkle.BuildTree(transactions)
-	if err != nil {
-		return nil, err
-	}
-
-	lastBlocks, err := service.blockDB.LastBlocks(int(service.cfg.AjustBlockNum))
-	if err != nil {
-		return nil, err
-	}
-
-	var id uint64 = 1
-	if len(lastBlocks) > 0 {
-		id = lastBlocks[len(lastBlocks)-1].Id + 1
-	}
-
-	difficulty, err := service.FindDifficulty(lastBlocks)
-	if err != nil {
-		return nil, err
-	}
-
-	block := &model.Block{
-		Id:         id,
-		RootHash:   content.Table[len(content.Table)-1][0].Hash,
-		Difficulty: difficulty,
-		Time:       time.Now().UTC(),
-		Body:       content,
-	}
-
-	hash, err := block.FindHash()
-	if err != nil {
-		return nil, err
-	}
-	block.Hash = hash
-
 	return block, nil
 }
 
@@ -117,38 +80,35 @@ func (service *BlockService) Validate(block *model.Block) error {
 	return nil
 }
 
-func (service *BlockService) FindDifficulty(lastBlocks []*model.Block) (float64, error) {
-	if len(lastBlocks) == 0 {
-		return model.ComputeDifficulty(model.MakeDifficulty(int(service.cfg.InitDifficulty))), nil
-	}
-
-	lastBlock := lastBlocks[len(lastBlocks)-1]
-
-	if lastBlock.Id%uint64(service.cfg.AjustBlockNum) != 0 {
-		return lastBlock.Difficulty, nil
-	}
-
-	actualDuration, err := service.ComputeAvgBlockDuration(lastBlocks)
+func (service *BlockService) MakeBlock(id uint64, difficulty float64, transactions []*model.Transaction) (*model.Block, error) {
+	content, err := merkle.BuildTree(transactions)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	difficulty := lastBlock.Difficulty * float64((actualDuration / service.cfg.BlockDuration).Microseconds())
-	return difficulty, nil
+	block := &model.Block{
+		Id:         id,
+		RootHash:   content.Table[len(content.Table)-1][0].Hash,
+		Difficulty: difficulty,
+		Time:       time.Now().UTC(),
+		Body:       content,
+	}
+
+	hash, err := block.FindHash()
+	if err != nil {
+		return nil, err
+	}
+	block.Hash = hash
+
+	return block, nil
 }
 
-func (service *BlockService) ComputeAvgBlockDuration(lastBlocks []*model.Block) (time.Duration, error) {
-
-	var actualDuration time.Duration
-	for i := 1; i < len(lastBlocks); i++ {
-		actualDuration += lastBlocks[i].Time.Sub(lastBlocks[i-1].Time)
-	}
-	actualDuration = time.Duration(int64(actualDuration) / int64(len(lastBlocks)))
-	return actualDuration, nil
+func (service *BlockService) LastBlocks(n int) ([]*model.Block, error) {
+	return service.blockDB.LastBlocks(n)
 }
 
 func validateDifficulty(hash []byte, difficulty float64) error {
-	actual := model.ComputeDifficulty(hash)
+	actual := bitcoin.ComputeDifficulty(hash)
 	if actual > difficulty {
 		return errors.ErrBlockNonceInvalid
 	}

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
@@ -89,7 +90,7 @@ func NewBlock(id uint64, z int) (*model.Block, error) {
 		Prevhash:   prevHash,
 		Id:         id,
 		RootHash:   rootHash,
-		Difficulty: model.ComputeDifficulty(model.MakeDifficulty(z)),
+		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(z)),
 		Time:       time.Now(),
 		Body:       tree,
 	}

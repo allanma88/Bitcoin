@@ -16,12 +16,12 @@ func Test_Read(t *testing.T) {
 		t.Fatalf("unexpect config, expect: %v, actual: %v", expect, cfg.DataDir)
 	}
 
-	if cfg.AjustBlockNum != config.DefaultAjustBlockNum {
-		t.Fatalf("default AjustBlockNum should be %v, actual: %v", config.DefaultAjustBlockNum, cfg.AjustBlockNum)
+	if cfg.BlocksPerDifficulty != config.DefaultBlocksPerDifficulty {
+		t.Fatalf("default AjustBlockNum should be %v, actual: %v", config.DefaultBlocksPerDifficulty, cfg.BlocksPerDifficulty)
 	}
 
-	if cfg.BlockDuration != config.DefaultBlockDuration {
-		t.Fatalf("default BlockDuration should be %v, actual: %v", config.DefaultBlockDuration, cfg.BlockDuration)
+	if cfg.BlockInterval != config.DefaultBlockInterval {
+		t.Fatalf("default BlockDuration should be %v, actual: %v", config.DefaultBlockInterval, cfg.BlockInterval)
 	}
 
 	if cfg.InitDifficulty != config.DefaultInitDifficulty {

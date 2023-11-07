@@ -26,7 +26,7 @@ func Test_Validate_Hash_Mismatch(t *testing.T) {
 	}
 
 	service := &service.TransactionService{}
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrIdentityHashInvalid) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrIdentityHashInvalid, err)
 	}
@@ -40,7 +40,7 @@ func Test_Validate_Tx_Exists(t *testing.T) {
 
 	txdb := newTransactionDB(tx)
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxExist) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxExist, err)
 	}
@@ -55,7 +55,7 @@ func Test_Validate_Time_Too_Early(t *testing.T) {
 
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrIdentityTooEarly) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrIdentityTooEarly, err)
 	}
@@ -70,7 +70,7 @@ func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrInLenMismatch) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrInLenMismatch, err)
 	}
@@ -100,7 +100,7 @@ func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxNotFound) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
 	}
@@ -125,7 +125,7 @@ func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxTooLate) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxTooLate, err)
 	}
@@ -150,7 +150,7 @@ func Test_Validate_Input_Time_Too_Late(t *testing.T) {
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxTooLate) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxTooLate, err)
 	}
@@ -174,7 +174,7 @@ func Test_Validate_In_Sig_Mismatch(t *testing.T) {
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxSigInvalid) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxSigInvalid, err)
 	}
@@ -192,7 +192,7 @@ func Test_Validate_Outs_Len_Not_Match(t *testing.T) {
 
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrOutLenMismatch) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrOutLenMismatch, err)
 	}
@@ -217,7 +217,7 @@ func Test_Validate_Output_Value_Too_Large(t *testing.T) {
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxInsufficientCoins) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxInsufficientCoins, err)
 	}
@@ -230,21 +230,27 @@ func Test_Validate_Success(t *testing.T) {
 	}
 
 	now := time.Now()
-	prevTx, err := newTransaction1(pubkey, 10, now)
+	var totalInput uint64 = 10
+	prevTx, err := newTransaction1(pubkey, totalInput, now)
 	if err != nil {
 		t.Fatalf("new transaction error: %s", err)
 	}
 
-	tx, err := newTransaction2(privkey, prevTx.Hash, 0, now.Add(time.Minute))
+	var totalOutput uint64 = 6
+	tx, err := newTransaction3(privkey, pubkey, prevTx.Hash, 0, totalOutput, time.Now())
 	if err != nil {
 		t.Fatalf("new transaction error: %s", err)
 	}
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
-	err = service.Validate(tx)
+	fee, err := service.Validate(tx)
 	if err != nil {
 		t.Fatalf("transaction validate error: %s", err)
+	}
+
+	if fee != totalInput-totalOutput {
+		t.Fatalf("transaction fee, expect: %d, actual: %d", totalInput-totalOutput, fee)
 	}
 }
 

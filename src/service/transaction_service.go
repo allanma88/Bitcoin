@@ -18,42 +18,42 @@ func NewTransactionService(db database.ITransactionDB) *TransactionService {
 }
 
 // TODO: validate the coin whether spent or not
-func (service *TransactionService) Validate(tx *model.Transaction) error {
+func (service *TransactionService) Validate(tx *model.Transaction) (uint64, error) {
 	hash, err := validateHash[*model.Transaction](tx.Hash, tx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	err = validateTimestamp(tx.Timestamp)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	existTx, err := service.GetTx(hash)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if existTx != nil {
-		return errors.ErrTxExist
+		return 0, errors.ErrTxExist
 	}
 
 	var totalInput uint64
 	totalInput, err = service.validateInputs(tx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	var totalOutput uint64
 	totalOutput, err = service.validateOutputs(tx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if totalInput < totalOutput {
-		return errors.ErrTxInsufficientCoins
+		return 0, errors.ErrTxInsufficientCoins
 	}
 
-	return nil
+	return totalInput - totalOutput, nil
 }
 
 func (service *TransactionService) RemoveTxs(txs []*model.Transaction) {

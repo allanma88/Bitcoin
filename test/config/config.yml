@@ -1,2 +1,2 @@
-datadir: Bitcoin
+data_dir: Bitcoin
 endpoint: localhost:50051

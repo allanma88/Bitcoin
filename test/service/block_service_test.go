@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/merkle"
@@ -41,7 +42,7 @@ func makeBlock(difficultyLevel int) (*model.Block, error) {
 
 	block := &model.Block{
 		RootHash:   content.Table[len(content.Table)-1][0].Hash,
-		Difficulty: model.ComputeDifficulty(model.MakeDifficulty(difficultyLevel)),
+		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(difficultyLevel)),
 		Time:       time.Now().UTC(),
 		Body:       content,
 	}
