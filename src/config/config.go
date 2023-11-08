@@ -61,7 +61,7 @@ func Read(path string) (*Config, error) {
 	}
 
 	var config Config
-	automapper.MapLoose(&config, &s)
+	automapper.MapLoose(&s, &config)
 
 	if config.BlocksPerDifficulty == 0 {
 		config.BlocksPerDifficulty = DefaultBlocksPerDifficulty
