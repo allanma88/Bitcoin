@@ -67,6 +67,21 @@ func Test_BaseDB_Remove(t *testing.T) {
 	}
 }
 
+func Test_BaseDB_Remove_Not_Exist_Entity(t *testing.T) {
+	db, err := leveldb.OpenFile(DBPath, nil)
+	if err != nil {
+		t.Fatalf("open %s error: %v", DBPath, err)
+	}
+	defer cleanUp(db, DBPath)
+
+	basedb := &database.BaseDB[string]{Database: db}
+	key := "Hello"
+	err = basedb.Remove([]byte(TestTable), []byte(key))
+	if err != nil {
+		t.Fatalf("remove %s error: %v", key, err)
+	}
+}
+
 func Test_BaseDB_Last(t *testing.T) {
 	db, err := leveldb.OpenFile(DBPath, nil)
 	if err != nil {

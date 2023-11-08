@@ -58,7 +58,7 @@ func (service *TransactionService) Validate(tx *model.Transaction) (uint64, erro
 
 func (service *TransactionService) RemoveTxs(txs []*model.Transaction) {
 	for _, tx := range txs {
-		err := service.ITransactionDB.RemoveTx(tx)
+		err := service.ITransactionDB.RemoveTx(tx.Hash)
 		if err != nil {
 			log.Printf("remove tx %x error", tx.Hash)
 		}
