@@ -17,14 +17,14 @@ import (
 )
 
 type Block struct {
-	Id         uint64             `json:"id,omitempty"`
-	Hash       []byte             `json:"hash,omitempty"`
-	Prevhash   []byte             `json:"prevhash,omitempty"`
-	RootHash   []byte             `json:"roothash,omitempty"`
-	Nonce      uint32             `json:"nonce,omitempty"`
-	Difficulty float64            `json:"difficulty,omitempty"`
-	Time       time.Time          `json:"timestamp,omitempty"`
-	Body       *merkle.MerkleTree `json:"-"`
+	Id         uint64                           `json:"id,omitempty"`
+	Hash       []byte                           `json:"hash,omitempty"`
+	Prevhash   []byte                           `json:"prevhash,omitempty"`
+	RootHash   []byte                           `json:"roothash,omitempty"`
+	Nonce      uint32                           `json:"nonce,omitempty"`
+	Difficulty float64                          `json:"difficulty,omitempty"`
+	Time       time.Time                        `json:"timestamp,omitempty"`
+	Body       *merkle.MerkleTree[*Transaction] `json:"-"`
 }
 
 func (block *Block) MarshalJSON() ([]byte, error) {
@@ -95,7 +95,7 @@ func (block *Block) UnmarshalJSON(data []byte) error {
 
 func BlockFrom(request *protocol.BlockReq) (*Block, error) {
 	var block Block
-	var tree merkle.MerkleTree
+	var tree merkle.MerkleTree[*Transaction]
 
 	err := json.Unmarshal(request.Content, &tree)
 	if err != nil {

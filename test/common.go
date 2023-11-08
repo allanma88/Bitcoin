@@ -73,13 +73,21 @@ func NewTransaction() (*model.Transaction, error) {
 	return tx, nil
 }
 
-func NewBlock(id uint64, z uint64) (*model.Block, error) {
+func NewBlock(id uint64, difficultyLevel uint64) (*model.Block, error) {
 	prevHash, err := cryptography.Hash("prev")
 	if err != nil {
 		return nil, err
 	}
 
-	tree, err := merkle.BuildTree[string]([]string{"Hello1", "Hello2"})
+	txs := make([]*model.Transaction, 4)
+	for i := 0; i < len(txs); i++ {
+		txs[i], err = NewTransaction()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	tree, err := merkle.BuildTree(txs)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +98,7 @@ func NewBlock(id uint64, z uint64) (*model.Block, error) {
 		Prevhash:   prevHash,
 		Id:         id,
 		RootHash:   rootHash,
-		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(z)),
+		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(difficultyLevel)),
 		Time:       time.Now(),
 		Body:       tree,
 	}

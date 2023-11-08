@@ -1,19 +1,17 @@
 package service
 
 import (
-	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"Bitcoin/src/service"
-	"fmt"
+	"Bitcoin/test"
 	"testing"
-	"time"
 )
 
 func Test_Validate_Succeed(t *testing.T) {
-	block, err := makeBlock(20)
+	block, err := test.NewBlock(1, 10)
 	if err != nil {
 		t.Fatalf("make block error: %v", err)
 	}
@@ -29,33 +27,6 @@ func Test_Validate_Succeed(t *testing.T) {
 	t.Logf("Block %x validate succeed", block.Hash)
 }
 
-func makeBlock(difficultyLevel uint64) (*model.Block, error) {
-	vals := make([]string, 5)
-	for i := 0; i < len(vals); i++ {
-		vals[i] = fmt.Sprintf("Hello%d", (i + 1))
-	}
-
-	content, err := merkle.BuildTree(vals)
-	if err != nil {
-		return nil, err
-	}
-
-	block := &model.Block{
-		RootHash:   content.Table[len(content.Table)-1][0].Hash,
-		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(difficultyLevel)),
-		Time:       time.Now().UTC(),
-		Body:       content,
-	}
-
-	hash, err := block.FindHash()
-	if err != nil {
-		return nil, err
-	}
-	block.Hash = hash
-
-	return block, nil
-}
-
 func newBlockDB(blocks ...*model.Block) database.IBlockDB {
 	basedb := newTestBaseDB[model.Block]()
 	blockdb := &database.BlockDB{IBaseDB: basedb}
@@ -66,7 +37,7 @@ func newBlockDB(blocks ...*model.Block) database.IBlockDB {
 }
 
 func newBlockContentDB() database.IBlockContentDB {
-	basedb := newTestBaseDB[merkle.MerkleTree]()
+	basedb := newTestBaseDB[merkle.MerkleTree[*model.Transaction]]()
 	blockContentDB := &database.BlockContentDB{IBaseDB: basedb}
 	return blockContentDB
 }

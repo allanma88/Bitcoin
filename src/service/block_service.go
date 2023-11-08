@@ -116,7 +116,7 @@ func validateDifficulty(hash []byte, difficulty float64) error {
 	return nil
 }
 
-func validateRootHash(roothash []byte, tree *merkle.MerkleTree) error {
+func validateRootHash(roothash []byte, tree *merkle.MerkleTree[*model.Transaction]) error {
 	valid, err := tree.Validate()
 	if err != nil {
 		return err

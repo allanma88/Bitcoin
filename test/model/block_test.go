@@ -190,7 +190,7 @@ func Test_Block_To(t *testing.T) {
 		t.Fatalf("block to err: %v", err)
 	}
 
-	var tree merkle.MerkleTree
+	var tree merkle.MerkleTree[*model.Transaction]
 	err = json.Unmarshal(req.Content, &tree)
 	if err != nil {
 		log.Fatalf("unmarshal tree error: %v", err)
@@ -208,8 +208,7 @@ func Test_Block_To(t *testing.T) {
 }
 
 func Test_Block_FindHash(t *testing.T) {
-	var z uint64 = 10
-	block, err := newBlock(z)
+	block, err := test.NewBlock(1, 10)
 	if err != nil {
 		t.Fatalf("new block err: %v", err)
 	}
@@ -229,38 +228,21 @@ func Test_Block_FindHash(t *testing.T) {
 	}
 }
 
-func newBlock(z uint64) (*model.Block, error) {
-	prevHash, err := cryptography.Hash("prev")
-	if err != nil {
-		return nil, err
-	}
-
-	tree, err := merkle.BuildTree[string]([]string{"Hello1", "Hello2"})
-	if err != nil {
-		return nil, err
-	}
-
-	rootHash := tree.Table[len(tree.Table)-1][0].Hash
-
-	block := &model.Block{
-		Id:         1,
-		Prevhash:   prevHash,
-		RootHash:   rootHash,
-		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(z)),
-		Time:       time.Now(),
-		Body:       tree,
-	}
-
-	return block, nil
-}
-
 func newBlockReq() (*protocol.BlockReq, error) {
 	prevHash, err := cryptography.Hash("prev")
 	if err != nil {
 		return nil, err
 	}
 
-	tree, err := merkle.BuildTree[string]([]string{"Hello1", "Hello2"})
+	txs := make([]*model.Transaction, 4)
+	for i := 0; i < len(txs); i++ {
+		txs[i], err = test.NewTransaction()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	tree, err := merkle.BuildTree(txs)
 	if err != nil {
 		return nil, err
 	}

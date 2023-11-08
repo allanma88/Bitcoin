@@ -28,7 +28,7 @@ func Test_Merkle_Marshal_Succeed(t *testing.T) {
 
 	t.Logf("json: %s", string(data))
 
-	var newtree merkle.MerkleTree
+	var newtree merkle.MerkleTree[string]
 	err = json.Unmarshal(data, &newtree)
 	if err != nil {
 		t.Fatalf("unmarshal merkle tree error: %s", err)
@@ -56,7 +56,7 @@ func Test_Merkle_Marshal_Duplicate_Failed(t *testing.T) {
 
 	t.Logf("json: %s", string(data))
 
-	var newtree merkle.MerkleTree
+	var newtree merkle.MerkleTree[string]
 	err = json.Unmarshal(data, &newtree)
 
 	nodeUnmarshalError := err.(merkle.NodeUnmarshalError)
@@ -82,7 +82,7 @@ func Test_Merkle_Marshal_Batch_Succeed(t *testing.T) {
 			t.Fatalf("hash merkle tree error: %s", err)
 		}
 
-		var newtree merkle.MerkleTree
+		var newtree merkle.MerkleTree[string]
 		err = json.Unmarshal(data, &newtree)
 		if err != nil {
 			t.Fatalf("unmarshal merkle tree error: %s", err)
@@ -104,7 +104,7 @@ func Test_Merkle_Unmarshal_Failed(t *testing.T) {
 			t.Fatalf("read json file error: %s", err)
 		}
 
-		var tree merkle.MerkleTree
+		var tree merkle.MerkleTree[string]
 		err = json.Unmarshal(data, &tree)
 
 		rowUnmarshalError, ok := err.(merkle.RowUnmarshalError)
@@ -187,7 +187,7 @@ func Test_Merkle_Validate_Success_From_Json(t *testing.T) {
 		t.Fatalf("read json file error: %s", err)
 	}
 
-	var tree merkle.MerkleTree
+	var tree merkle.MerkleTree[string]
 	err = json.Unmarshal(data, &tree)
 	if err != nil {
 		t.Fatalf("unmarshal merkle tree error: %s", err)
@@ -208,7 +208,7 @@ func Test_Merkle_Validate_Fail_From_Json(t *testing.T) {
 		t.Fatalf("read json file error: %s", err)
 	}
 
-	var tree merkle.MerkleTree
+	var tree merkle.MerkleTree[string]
 	err = json.Unmarshal(data, &tree)
 	if err != nil {
 		t.Fatalf("unmarshal merkle tree error: %s", err)
@@ -223,10 +223,8 @@ func Test_Merkle_Validate_Fail_From_Json(t *testing.T) {
 	}
 }
 
-func Test_Merkle_Has(t *testing.T) {
+func Test_Merkle_Get(t *testing.T) {
 	for n := 2; n < 100; n++ {
-		t.Logf("n = %d", n)
-
 		vals := make([]string, n)
 		hashs := make([][]byte, n)
 		for i := 0; i < n; i++ {
@@ -244,18 +242,21 @@ func Test_Merkle_Has(t *testing.T) {
 		}
 
 		for i, hash := range hashs {
-			has, err := tree.Has(hash)
+			val, err := tree.Get(hash)
 			if err != nil {
 				t.Fatalf("search merkle tree error: %s", err)
 			}
-			if !has {
-				t.Fatalf("didn't find the hash %x of %s in the merkle tree", hash, vals[i])
+			if val == "" {
+				t.Fatalf("didn't find the hash %x in the merkle tree", hash)
+			}
+			if val != vals[i] {
+				t.Fatalf("expect get: %s, actual: %s", vals[i], val)
 			}
 		}
 	}
 }
 
-func print(tree *merkle.MerkleTree, t *testing.T) {
+func print[T any](tree *merkle.MerkleTree[T], t *testing.T) {
 	for r := 0; r < len(tree.Table); r++ {
 		for c := 0; c < len(tree.Table[r]); c++ {
 			t.Logf("%x", tree.Table[r][c].Hash)
