@@ -3,11 +3,13 @@ package main
 import (
 	"Bitcoin/src/bitcoin/server"
 	"Bitcoin/src/config"
+	"Bitcoin/src/database"
 	"Bitcoin/src/protocol"
 	"flag"
 	"log"
 	"net"
 
+	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/grpc"
 )
 
@@ -23,13 +25,16 @@ func main() {
 		log.Fatalf("read config error: %v", err)
 	}
 
-	listener, err := net.Listen("tcp", cfg.Endpoint)
+	db, err := leveldb.OpenFile(cfg.DataDir, nil)
 	if err != nil {
-		log.Fatalf("failed to listen %v: %v", cfg.Endpoint, err)
+		log.Fatalf("failed to open db: %v", err)
 	}
 
-	register := grpc.NewServer()
-	server, err := server.NewBitcoinServer(cfg)
+	txdb := database.NewTransactionDB(db)
+	blockdb := database.NewBlockDB(db)
+	blockContentDb := database.NewBlockContentDB(db)
+
+	server, err := server.NewBitcoinServer(cfg, txdb, blockdb, blockContentDb)
 	if err != nil {
 		log.Fatalf("failed to create server: %v", err)
 	}
@@ -39,6 +44,12 @@ func main() {
 	go server.BroadcastBlock()
 	go server.UpdateState()
 
+	listener, err := net.Listen("tcp", cfg.Endpoint)
+	if err != nil {
+		log.Fatalf("failed to listen %v: %v", cfg.Endpoint, err)
+	}
+
+	register := grpc.NewServer()
 	protocol.RegisterTransactionServer(register, server)
 	log.Printf("server listening at %v", listener.Addr())
 

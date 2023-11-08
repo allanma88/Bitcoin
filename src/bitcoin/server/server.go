@@ -9,8 +9,6 @@ import (
 	"Bitcoin/src/service"
 	"context"
 	"log"
-
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
 const (
@@ -24,32 +22,23 @@ const (
 type BitcoinServer struct {
 	protocol.TransactionServer
 	protocol.BlockServer
-	*service.BlockService
 	state               *bitcoin.State
 	cfg                 *config.Config
-	txService           *service.TransactionService
 	nodeService         *service.NodeService
+	txService           *service.TransactionService
+	blockService        *service.BlockService
 	txBroadcastQueue    chan *model.Transaction
 	blockQueue          chan *model.Block
 	blockBroadcastQueue chan *model.Block
 	mineQueue           chan *model.Transaction
 }
 
-func NewBitcoinServer(cfg *config.Config) (*BitcoinServer, error) {
-	db, err := leveldb.OpenFile(cfg.DataDir, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	txdb := database.NewTransactionDB(db)
-	blockdb := database.NewBlockDB(db)
-	blockContentDb := database.NewBlockContentDB(db)
-
+func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB) (*BitcoinServer, error) {
 	server := &BitcoinServer{
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg),
 		txService:           service.NewTransactionService(txdb),
-		BlockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
+		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
 		blockQueue:          make(chan *model.Block, BlockQueueSize),
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
@@ -102,14 +91,14 @@ func (s *BitcoinServer) AddBlock(ctx context.Context, request *protocol.BlockReq
 	}
 	log.Printf("received block: %x", block.Hash)
 
-	err = s.BlockService.Validate(block)
+	err = s.blockService.Validate(block)
 	if err != nil {
 		log.Printf("validate block %x failed: %v", block.Hash, err)
 		return &protocol.BlockReply{Result: false}, err
 	}
 	log.Printf("validated block: %x", block.Hash)
 
-	err = s.BlockService.SaveBlock(block)
+	err = s.blockService.SaveBlock(block)
 	if err != nil {
 		log.Printf("save block %x failed: %v", block.Hash, err)
 		return &protocol.BlockReply{Result: false}, err
@@ -155,6 +144,7 @@ func (s *BitcoinServer) UpdateState() {
 }
 
 func (s *BitcoinServer) MineBlock() {
+	//TODO: stop mining when receive the next block
 	for {
 		lastBlockId, reward, difficulty := s.state.Get(s.cfg.BlocksPerDifficulty, s.cfg.BlocksPerRewrad, s.cfg.BlockInterval)
 
@@ -165,7 +155,7 @@ func (s *BitcoinServer) MineBlock() {
 			continue
 		}
 
-		block, err := s.BlockService.MineBlock(lastBlockId, difficulty, txs)
+		block, err := s.blockService.MineBlock(lastBlockId, difficulty, txs)
 		if err != nil {
 			//TODO: maybe fatal err?
 			log.Printf("mine block error: %v", err)
