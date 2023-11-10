@@ -60,7 +60,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return err
 	}
 
-	existBlock, err := service.blockDB.GetBlock(block.Id, hash)
+	existBlock, err := service.blockDB.GetBlock(hash)
 	if err != nil {
 		return err
 	}
@@ -102,11 +102,6 @@ func (service *BlockService) MakeBlock(id uint64, difficulty float64, transactio
 	block.Hash = hash
 
 	return block, nil
-}
-
-// TODO: still need?
-func (service *BlockService) LastBlocks(n int) ([]*model.Block, error) {
-	return service.blockDB.LastBlocks(n)
 }
 
 func validateDifficulty(hash []byte, difficulty float64) error {

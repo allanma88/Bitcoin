@@ -6,14 +6,12 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
-	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 type IBaseDB[T any] interface {
 	Save(prefix, key []byte, val *T) error
 	Get(prefix, key []byte) (*T, error)
 	Remove(prefix, key []byte) error
-	Last(prefix []byte, n int) ([]*T, error)
 	Close() error
 }
 
@@ -57,32 +55,6 @@ func (db *BaseDB[T]) Remove(prefix, key []byte) error {
 	opt := &opt.WriteOptions{}
 	k := makeKey(prefix, key)
 	return db.Database.Delete(k, opt)
-}
-
-func (db *BaseDB[T]) Last(prefix []byte, n int) ([]*T, error) {
-	opt := &opt.ReadOptions{}
-	slice := util.BytesPrefix(prefix)
-	iterator := db.Database.NewIterator(slice, opt)
-
-	vals := make([]*T, n)
-	if iterator.Last() {
-		for i := n - 1; i >= 0; i-- {
-			data := iterator.Value()
-			var val T
-			err := json.Unmarshal(data, &val)
-			if err != nil {
-				return nil, err
-			}
-			vals[i] = &val
-
-			if !iterator.Prev() {
-				break
-			}
-		}
-		return vals, nil
-	}
-
-	return nil, nil
 }
 
 func (db *BaseDB[T]) Close() error {
