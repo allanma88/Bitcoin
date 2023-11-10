@@ -160,5 +160,5 @@ func (block *Block) ComputeHash() ([]byte, error) {
 }
 
 func (block *Block) GetTxs() []*Transaction {
-	return nil
+	return block.Body.GetVals()
 }

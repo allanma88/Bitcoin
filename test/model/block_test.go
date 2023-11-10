@@ -8,6 +8,7 @@ import (
 	"Bitcoin/src/protocol"
 	"Bitcoin/test"
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -213,7 +214,7 @@ func Test_Block_FindHash(t *testing.T) {
 		t.Fatalf("new block err: %v", err)
 	}
 
-	hash, err := block.FindHash()
+	hash, err := block.FindHash(context.TODO())
 	if err != nil {
 		t.Fatalf("find hash err: %v", err)
 	}

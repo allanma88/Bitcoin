@@ -270,6 +270,18 @@ func (tree *MerkleTree[T]) Get(hash []byte) (T, error) {
 	}
 }
 
+func (tree *MerkleTree[T]) GetVals() []T {
+	if len(tree.Table) == 0 {
+		return nil
+	}
+
+	vals := make([]T, len(tree.Table[0]))
+	for i := 0; i < len(tree.Table[0]); i++ {
+		vals[i] = tree.Table[0][i].Val
+	}
+	return vals
+}
+
 func rebuild[T any](tree *MerkleTree[T]) error {
 	if len(tree.Table) <= 1 {
 		return RowUnmarshalError{Err: ErrMtFewRows}

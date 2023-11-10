@@ -5,6 +5,7 @@ import (
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -103,7 +104,7 @@ func NewBlock(id uint64, difficultyLevel uint64) (*model.Block, error) {
 		Body:       tree,
 	}
 
-	hash, err := block.FindHash()
+	hash, err := block.FindHash(context.TODO())
 	if err != nil {
 		return nil, err
 	}
