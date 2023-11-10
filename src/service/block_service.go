@@ -8,6 +8,7 @@ import (
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"bytes"
+	"context"
 	"log"
 	"time"
 )
@@ -26,8 +27,8 @@ func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockCo
 	}
 }
 
-func (serv *BlockService) MineBlock(lastBlockId uint64, difficulty float64, transactions []*model.Transaction) (*model.Block, error) {
-	block, err := serv.MakeBlock(lastBlockId+1, difficulty, transactions)
+func (serv *BlockService) MineBlock(lastBlockId uint64, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
+	block, err := serv.MakeBlock(lastBlockId+1, difficulty, transactions, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +81,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 	return nil
 }
 
-func (service *BlockService) MakeBlock(id uint64, difficulty float64, transactions []*model.Transaction) (*model.Block, error) {
+func (service *BlockService) MakeBlock(id uint64, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
 	content, err := merkle.BuildTree(transactions)
 	if err != nil {
 		return nil, err
@@ -94,7 +95,7 @@ func (service *BlockService) MakeBlock(id uint64, difficulty float64, transactio
 		Body:       content,
 	}
 
-	hash, err := block.FindHash()
+	hash, err := block.FindHash(ctx)
 	if err != nil {
 		return nil, err
 	}

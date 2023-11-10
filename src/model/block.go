@@ -6,6 +6,7 @@ import (
 	"Bitcoin/src/errors"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/protocol"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -122,16 +123,20 @@ func BlockTo(block *Block) (*protocol.BlockReq, error) {
 	return &request, nil
 }
 
-func (block *Block) FindHash() ([]byte, error) {
+func (block *Block) FindHash(ctx context.Context) ([]byte, error) {
 	var nonce uint32
 	//return err if not find valid hash
-	err := errors.ErrBlockContentInvalid
 	for nonce = 1; nonce < math.MaxUint32; nonce++ {
+		err := context.Cause(ctx)
+		if err != nil {
+			return nil, err
+		}
+
 		block.Nonce = nonce
 
 		hash, err := block.ComputeHash()
 		if err != nil {
-			break
+			return nil, err
 		}
 
 		actual := bitcoin.ComputeDifficulty(hash)
@@ -139,8 +144,9 @@ func (block *Block) FindHash() ([]byte, error) {
 			return hash, nil
 		}
 	}
+
 	block.Nonce = 0
-	return nil, err
+	return nil, errors.ErrBlockContentInvalid
 }
 
 func (block *Block) ComputeHash() ([]byte, error) {
@@ -151,4 +157,8 @@ func (block *Block) ComputeHash() ([]byte, error) {
 
 	block.Hash = originalHash
 	return hash, err
+}
+
+func (block *Block) GetTxs() []*Transaction {
+	return nil
 }

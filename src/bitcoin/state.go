@@ -46,3 +46,9 @@ func (state *State) Get(blocksPerDifficulty, blocksPerRewrad uint64, expectBlock
 
 	return state.lastBlockId, reward, state.difficulty
 }
+
+func (state *State) GetLastBlockId() uint64 {
+	state.lock.Lock()
+	defer state.lock.Unlock()
+	return state.lastBlockId
+}

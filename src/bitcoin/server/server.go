@@ -4,6 +4,7 @@ import (
 	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
+	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"Bitcoin/src/service"
@@ -31,9 +32,10 @@ type BitcoinServer struct {
 	blockQueue          chan *model.Block
 	blockBroadcastQueue chan *model.Block
 	mineQueue           chan *model.Transaction
+	cancelFunc          context.CancelCauseFunc
 }
 
-func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB) (*BitcoinServer, error) {
+func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
 	server := &BitcoinServer{
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg),
@@ -44,6 +46,7 @@ func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb 
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
 		mineQueue:           make(chan *model.Transaction, MaxTxSizePerBlock),
 		state:               bitcoin.NewState(cfg.InitDifficultyLevel), //TODO: how to set when server restart?
+		cancelFunc:          cancelFunc,
 	}
 	return server, nil
 }
@@ -106,6 +109,9 @@ func (s *BitcoinServer) AddBlock(ctx context.Context, request *protocol.BlockReq
 	log.Printf("saved block: %x", block.Hash)
 
 	go func() {
+		if s.state.GetLastBlockId()+1 == block.Id {
+			s.cancelFunc(errors.ErrServerCancelMining)
+		}
 		s.blockQueue <- block
 		s.blockBroadcastQueue <- block
 	}()
@@ -138,12 +144,16 @@ func (s *BitcoinServer) UpdateState() {
 	for {
 		for i := uint64(0); i < s.cfg.BlocksPerDifficulty; i++ {
 			block := <-s.blockQueue
+
+			txs := block.GetTxs()
+			s.txService.RemoveTxs(txs)
+
 			s.state.Update(block.Id, block.Time)
 		}
 	}
 }
 
-func (s *BitcoinServer) MineBlock() {
+func (s *BitcoinServer) MineBlock(ctx context.Context) {
 	//TODO: stop mining when receive the next block
 	for {
 		lastBlockId, reward, difficulty := s.state.Get(s.cfg.BlocksPerDifficulty, s.cfg.BlocksPerRewrad, s.cfg.BlockInterval)
@@ -155,14 +165,12 @@ func (s *BitcoinServer) MineBlock() {
 			continue
 		}
 
-		block, err := s.blockService.MineBlock(lastBlockId, difficulty, txs)
+		block, err := s.blockService.MineBlock(lastBlockId, difficulty, txs, ctx)
 		if err != nil {
 			//TODO: maybe fatal err?
 			log.Printf("mine block error: %v", err)
 			continue
 		}
-
-		s.txService.RemoveTxs(txs)
 
 		s.blockQueue <- block
 		s.blockBroadcastQueue <- block

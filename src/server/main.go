@@ -5,6 +5,7 @@ import (
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/protocol"
+	"context"
 	"flag"
 	"log"
 	"net"
@@ -34,12 +35,14 @@ func main() {
 	blockdb := database.NewBlockDB(db)
 	blockContentDb := database.NewBlockContentDB(db)
 
-	server, err := server.NewBitcoinServer(cfg, txdb, blockdb, blockContentDb)
+	ctx, cancelFunc := context.WithCancelCause(context.Background())
+
+	server, err := server.NewBitcoinServer(cfg, txdb, blockdb, blockContentDb, cancelFunc)
 	if err != nil {
 		log.Fatalf("failed to create server: %v", err)
 	}
 
-	go server.MineBlock()
+	go server.MineBlock(ctx)
 	go server.BroadcastTx()
 	go server.BroadcastBlock()
 	go server.UpdateState()

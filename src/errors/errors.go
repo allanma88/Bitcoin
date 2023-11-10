@@ -20,4 +20,5 @@ var (
 	ErrBlockNonceInvalid   = errors.New("invalid block nonce")
 	ErrBlockContentInvalid = errors.New("invalid block content")
 	ErrBlockNoValidHash    = errors.New("no valid block hash")
+	ErrServerCancelMining  = errors.New("the block is already mined")
 )
