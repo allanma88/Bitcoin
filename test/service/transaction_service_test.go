@@ -77,17 +77,7 @@ func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 }
 
 func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
-	privkey, _, err := test.NewKeys()
-	if err != nil {
-		t.Fatalf("new keys err: %s", err)
-	}
-
-	prevHash, err := cryptography.Hash("whatever")
-	if err != nil {
-		t.Fatalf("create hash error: %s", err)
-	}
-
-	ins, err := newIns(privkey, prevHash, 0)
+	ins, err := newIns(nil, nil, 0)
 	if err != nil {
 		t.Fatalf("new ins error: %s", err)
 	}
@@ -105,8 +95,8 @@ func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
 	}
 }
 
-func Test_Validate_Input_PrevTx_Outof_Chain_Found(t *testing.T) {
-	prevTx, tx, err := newTransactionPair(0, 10, 0)
+func Test_Validate_Input_PrevTx_Out_Chain_Found(t *testing.T) {
+	prevTx, tx, err := newTransactionPair(10, 0, time.Minute, []byte{})
 	if err != nil {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
@@ -120,12 +110,10 @@ func Test_Validate_Input_PrevTx_Outof_Chain_Found(t *testing.T) {
 }
 
 func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
-	prevTx, tx, err := newTransactionPair(0, 10, 0)
+	prevTx, tx, err := newTransactionPair(10, 0, 0, nil)
 	if err != nil {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
-
-	tx.Timestamp = prevTx.Timestamp
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
@@ -136,12 +124,11 @@ func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
 }
 
 func Test_Validate_Input_Time_Too_Late(t *testing.T) {
-	prevTx, tx, err := newTransactionPair(0, 10, 0)
+	prevTx, tx, err := newTransactionPair(10, 0, -1*time.Minute, nil)
 	if err != nil {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	tx.Timestamp = prevTx.Timestamp.Add(-1 * time.Minute)
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
@@ -151,12 +138,27 @@ func Test_Validate_Input_Time_Too_Late(t *testing.T) {
 }
 
 func Test_Validate_In_Sig_Mismatch(t *testing.T) {
-	prevTx, tx, err := newTransactionPair(0, 10, 0)
+	privkey, pubkey, err := test.NewKeys()
 	if err != nil {
-		t.Fatalf("new transaction pair error: %s", err)
+		t.Fatalf("new keys error: %s", err)
 	}
 
-	tx.Ins[0].Signature = []byte{}
+	prevOuts := newOuts(pubkey, 10)
+	prevTx, err := newTransaction1([]*model.In{}, prevOuts, time.Now(), nil)
+	if err != nil {
+		t.Fatalf("new transaction error: %s", err)
+	}
+
+	ins, err := newIns(privkey, prevTx.Hash, 0)
+	if err != nil {
+		t.Fatalf("new ins error: %s", err)
+	}
+	ins[0].Signature = []byte{}
+
+	tx, err := newTransaction1(ins, []*model.Out{}, time.Now().Add(time.Minute), []byte{})
+	if err != nil {
+		t.Fatalf("new transaction error: %s", err)
+	}
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
@@ -185,7 +187,7 @@ func Test_Validate_Outs_Len_Not_Match(t *testing.T) {
 
 func Test_Validate_Output_Value_Too_Large(t *testing.T) {
 	var prevVal uint64 = 10
-	prevTx, tx, err := newTransactionPair(0, prevVal, prevVal+1)
+	prevTx, tx, err := newTransactionPair(prevVal, prevVal+1, time.Minute, nil)
 	if err != nil {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
@@ -201,7 +203,7 @@ func Test_Validate_Output_Value_Too_Large(t *testing.T) {
 func Test_Validate_Success(t *testing.T) {
 	var totalInput uint64 = 10
 	var totalOutput uint64 = 6
-	prevTx, tx, err := newTransactionPair(0, totalInput, totalOutput)
+	prevTx, tx, err := newTransactionPair(totalInput, totalOutput, time.Minute, nil)
 	if err != nil {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
@@ -237,6 +239,21 @@ func Test_Validate_Hash_Not_Change(t *testing.T) {
 }
 
 func newIns(privkey, prevHash []byte, index uint32) ([]*model.In, error) {
+	var err error
+	if privkey == nil {
+		privkey, _, err = test.NewKeys()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if prevHash == nil {
+		prevHash, err = cryptography.Hash("whatever")
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	sig, err := cryptography.Sign(privkey, prevHash)
 	if err != nil {
 		return nil, err
@@ -252,19 +269,15 @@ func newIns(privkey, prevHash []byte, index uint32) ([]*model.In, error) {
 	return ins, nil
 }
 
-func newTransactionPair(index uint32, prevVal, val uint64) (*model.Transaction, *model.Transaction, error) {
+func newTransactionPair(prevVal, val uint64, duration time.Duration, prevBlockHash []byte) (*model.Transaction, *model.Transaction, error) {
 	privkey, pubkey, err := test.NewKeys()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	blockHash, err := cryptography.Hash("block")
-	if err != nil {
-		return nil, nil, err
-	}
-
+	now := time.Now()
 	prevOuts := newOuts(pubkey, prevVal)
-	prevTx, err := newTransaction1([]*model.In{}, prevOuts, time.Now(), blockHash)
+	prevTx, err := newTransaction1([]*model.In{}, prevOuts, now, prevBlockHash)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -274,7 +287,7 @@ func newTransactionPair(index uint32, prevVal, val uint64) (*model.Transaction, 
 		return nil, nil, err
 	}
 	outs := newOuts(pubkey, val)
-	tx, err := newTransaction1(ins, outs, time.Now(), nil)
+	tx, err := newTransaction1(ins, outs, now.Add(duration), []byte{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -295,6 +308,14 @@ func newOuts(pubkey []byte, val uint64) []*model.Out {
 }
 
 func newTransaction1(ins []*model.In, outs []*model.Out, timestamp time.Time, blockHash []byte) (*model.Transaction, error) {
+	var err error
+	if blockHash == nil {
+		blockHash, err = cryptography.Hash("block")
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	tx := &model.Transaction{
 		InLen:     uint32(len(ins)),
 		OutLen:    uint32(len(outs)),
