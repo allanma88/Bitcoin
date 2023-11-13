@@ -3,14 +3,13 @@ package service
 import (
 	"Bitcoin/src/bitcoin/client"
 	"Bitcoin/src/config"
-	"Bitcoin/src/cryptography"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"Bitcoin/src/service"
+	"Bitcoin/test"
 	"errors"
 	"fmt"
 	"testing"
-	"time"
 )
 
 func Test_SendTx_Check_Nodes(t *testing.T) {
@@ -20,7 +19,7 @@ func Test_SendTx_Check_Nodes(t *testing.T) {
 	}
 	nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 
-	tx, err := newTransaction()
+	tx, err := test.NewTransaction()
 	if err != nil {
 		t.Fatalf("new transaction error: %s", err)
 	}
@@ -62,7 +61,7 @@ func Test_SendTx_Not_Remove_Failed_Not_Enough_Nodes(t *testing.T) {
 		serv.AddNodes(nodes...)
 		serv.AddNodes(failNodes...)
 
-		tx, err := newTransaction()
+		tx, err := test.NewTransaction()
 		if err != nil {
 			t.Fatalf("new transaction error: %s", err)
 		}
@@ -109,7 +108,7 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 		serv.AddNodes(nodes...)
 		serv.AddNodes(failNodes...)
 
-		tx, err := newTransaction()
+		tx, err := test.NewTransaction()
 		if err != nil {
 			t.Fatalf("new transaction error: %s", err)
 		}
@@ -160,7 +159,7 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 	serv.AddNodes(nodes...)
 	serv.AddNodes(probablyFailNodes...)
 
-	tx, err := newTransaction()
+	tx, err := test.NewTransaction()
 	if err != nil {
 		t.Fatalf("new transaction error: %s", err)
 	}
@@ -295,21 +294,6 @@ func checkNodes(channels map[string]TxChannel, endpoint string) (int, error) {
 		}
 	}
 	return n, nil
-}
-
-func newTransaction() (*model.Transaction, error) {
-	tx := &model.Transaction{
-		InLen:     0,
-		OutLen:    0,
-		Timestamp: time.Now(),
-	}
-	originalHash, err := cryptography.Hash(tx)
-	if err != nil {
-		return nil, err
-	}
-
-	tx.Hash = originalHash
-	return tx, nil
 }
 
 type TestBitcoinClient struct {
