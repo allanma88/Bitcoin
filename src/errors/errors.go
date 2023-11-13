@@ -10,6 +10,7 @@ var (
 	ErrTxTooLate           = errors.New("transaction is later than prev transaction")
 	ErrTxSigInvalid        = errors.New("transaction signature invalid")
 	ErrTxNotFound          = errors.New("transaction not found")
+	ErrPrevTxNotFound      = errors.New("prev transaction not found")
 	ErrTxInsufficientCoins = errors.New("transaction insufficient coins")
 	ErrInLenMismatch       = errors.New("transaction input length mismatch")
 	ErrInLenOutOfIndex     = errors.New("transaction input out of index of prev transaction outputs")

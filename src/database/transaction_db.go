@@ -13,7 +13,6 @@ const (
 type ITransactionDB interface {
 	SaveTx(tx *model.Transaction) error
 	GetTx(hash []byte) (*model.Transaction, error)
-	RemoveTx(hash []byte) error
 	Close() error
 }
 
@@ -33,8 +32,4 @@ func (db *TransactionDB) SaveTx(tx *model.Transaction) error {
 
 func (db *TransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
 	return db.Get([]byte(TxTable), hash)
-}
-
-func (db *TransactionDB) RemoveTx(hash []byte) error {
-	return db.Remove([]byte(TxTable), hash)
 }

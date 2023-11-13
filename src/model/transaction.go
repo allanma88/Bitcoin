@@ -100,6 +100,7 @@ type Transaction struct {
 	Outs      []*Out    `json:"outs,omitempty"`
 	Fee       uint64    `json:"-,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitempty"`
+	BlockHash []byte    `json:"block_hash,omitempty"`
 }
 
 func (tx *Transaction) MarshalJSON() ([]byte, error) {
@@ -110,6 +111,7 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		Ins       []*In     `json:"ins,omitempty"`
 		Outs      []*Out    `json:"outs,omitempty"`
 		Timestamp time.Time `json:"timestamp,omitempty"`
+		BlockHash string    `json:"block_hash,omitempty"`
 	}{
 		Hash:      hex.EncodeToString(tx.Hash),
 		InLen:     tx.InLen,
@@ -117,6 +119,7 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		Ins:       tx.Ins,
 		Outs:      tx.Outs,
 		Timestamp: tx.Timestamp,
+		BlockHash: hex.EncodeToString(tx.BlockHash),
 	}
 	return json.Marshal(s)
 }
@@ -129,6 +132,7 @@ func (tx *Transaction) UnmarshalJSON(data []byte) error {
 		Ins       []*In     `json:"ins,omitempty"`
 		Outs      []*Out    `json:"outs,omitempty"`
 		Timestamp time.Time `json:"timestamp,omitempty"`
+		BlockHash string    `json:"block_hash,omitempty"`
 	}
 
 	err := json.Unmarshal(data, &s)
@@ -137,6 +141,11 @@ func (tx *Transaction) UnmarshalJSON(data []byte) error {
 	}
 
 	tx.Hash, err = hex.DecodeString(s.Hash)
+	if err != nil {
+		return err
+	}
+
+	tx.BlockHash, err = hex.DecodeString(s.BlockHash)
 	if err != nil {
 		return err
 	}

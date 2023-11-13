@@ -101,6 +101,10 @@ func (service *BlockService) MakeBlock(id uint64, difficulty float64, transactio
 	}
 	block.Hash = hash
 
+	for _, tx := range transactions {
+		tx.BlockHash = hash
+	}
+
 	return block, nil
 }
 

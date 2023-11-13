@@ -23,8 +23,8 @@ type BlockContentDB struct {
 
 func NewBlockContentDB(db *leveldb.DB) IBlockContentDB {
 	basedb := &BaseDB[merkle.MerkleTree[*model.Transaction]]{Database: db}
-	blockdb := &BlockContentDB{IBaseDB: basedb}
-	return blockdb
+	blockContentDB := &BlockContentDB{IBaseDB: basedb}
+	return blockContentDB
 }
 
 func (db *BlockContentDB) SaveBlockContent(key []byte, content *merkle.MerkleTree[*model.Transaction]) error {

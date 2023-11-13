@@ -145,9 +145,7 @@ func (s *BitcoinServer) UpdateState() {
 		for i := uint64(0); i < s.cfg.BlocksPerDifficulty; i++ {
 			block := <-s.blockQueue
 
-			txs := block.GetTxs()
-			s.txService.RemoveTxs(txs)
-
+			s.txService.SaveTxs(block.GetTxs())
 			s.state.Update(block.Id, block.Time)
 		}
 	}

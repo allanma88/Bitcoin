@@ -11,7 +11,6 @@ import (
 type IBaseDB[T any] interface {
 	Save(prefix, key []byte, val *T) error
 	Get(prefix, key []byte) (*T, error)
-	Remove(prefix, key []byte) error
 	Close() error
 }
 
@@ -49,12 +48,6 @@ func (db *BaseDB[T]) Get(prefix, key []byte) (*T, error) {
 		return nil, err
 	}
 	return &val, nil
-}
-
-func (db *BaseDB[T]) Remove(prefix, key []byte) error {
-	opt := &opt.WriteOptions{}
-	k := makeKey(prefix, key)
-	return db.Database.Delete(k, opt)
 }
 
 func (db *BaseDB[T]) Close() error {

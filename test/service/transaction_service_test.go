@@ -15,7 +15,7 @@ import (
 )
 
 func Test_Validate_Hash_Mismatch(t *testing.T) {
-	tx, err := newTransaction4([]*model.In{}, []*model.Out{}, time.Now())
+	tx, err := newTransaction1([]*model.In{}, []*model.Out{}, time.Now(), nil)
 	if err != nil {
 		t.Fatalf("new transaction 4 error: %s", err)
 	}
@@ -33,7 +33,7 @@ func Test_Validate_Hash_Mismatch(t *testing.T) {
 }
 
 func Test_Validate_Tx_Exists(t *testing.T) {
-	tx, err := newTransaction4([]*model.In{}, []*model.Out{}, time.Now())
+	tx, err := newTransaction1([]*model.In{}, []*model.Out{}, time.Now(), nil)
 	if err != nil {
 		t.Fatalf("new transaction 4 error: %s", err)
 	}
@@ -48,7 +48,7 @@ func Test_Validate_Tx_Exists(t *testing.T) {
 
 func Test_Validate_Time_Too_Early(t *testing.T) {
 	future := time.Now().Add(2*time.Hour + time.Minute)
-	tx, err := newTransaction4([]*model.In{}, []*model.Out{}, future)
+	tx, err := newTransaction1([]*model.In{}, []*model.Out{}, future, nil)
 	if err != nil {
 		t.Fatalf("new transaction 4 error: %s", err)
 	}
@@ -63,7 +63,7 @@ func Test_Validate_Time_Too_Early(t *testing.T) {
 
 func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 	ins := []*model.In{{}, {}}
-	tx, err := newTransaction_InLen_Error(ins, []*model.Out{}, time.Now())
+	tx, err := newTransaction2(ins, []*model.Out{}, 3, 1)
 	if err != nil {
 		t.Fatalf("new transaction 4 error: %s", err)
 	}
@@ -77,15 +77,9 @@ func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 }
 
 func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
-	privkey, pubkey, err := test.NewKeys()
+	privkey, _, err := test.NewKeys()
 	if err != nil {
 		t.Fatalf("new keys err: %s", err)
-	}
-
-	now := time.Now()
-	prevTx, err := newTransaction1(pubkey, 10, now)
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
 	}
 
 	prevHash, err := cryptography.Hash("whatever")
@@ -93,35 +87,45 @@ func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
 		t.Fatalf("create hash error: %s", err)
 	}
 
-	tx, err := newTransaction2(privkey, prevHash, 0, now.Add(time.Minute))
+	ins, err := newIns(privkey, prevHash, 0)
+	if err != nil {
+		t.Fatalf("new ins error: %s", err)
+	}
+
+	tx, err := newTransaction1(ins, []*model.Out{}, time.Now(), nil)
 	if err != nil {
 		t.Fatalf("new transaction error: %s", err)
+	}
+
+	txdb := newTransactionDB()
+	service := service.NewTransactionService(txdb)
+	_, err = service.Validate(tx)
+	if !errors.Is(err, bcerrors.ErrPrevTxNotFound) {
+		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
+	}
+}
+
+func Test_Validate_Input_PrevTx_Outof_Chain_Found(t *testing.T) {
+	prevTx, tx, err := newTransactionPair(0, 10, 0)
+	if err != nil {
+		t.Fatalf("new transaction pair error: %s", err)
 	}
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
-	if !errors.Is(err, bcerrors.ErrTxNotFound) {
+	if !errors.Is(err, bcerrors.ErrPrevTxNotFound) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
 	}
 }
 
 func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
-	privkey, pubkey, err := test.NewKeys()
+	prevTx, tx, err := newTransactionPair(0, 10, 0)
 	if err != nil {
-		t.Fatalf("new keys err: %s", err)
+		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	now := time.Now()
-	prevTx, err := newTransaction1(pubkey, 10, now)
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
-
-	tx, err := newTransaction2(privkey, prevTx.Hash, 0, now)
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
+	tx.Timestamp = prevTx.Timestamp
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
@@ -132,22 +136,12 @@ func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
 }
 
 func Test_Validate_Input_Time_Too_Late(t *testing.T) {
-	privkey, pubkey, err := test.NewKeys()
+	prevTx, tx, err := newTransactionPair(0, 10, 0)
 	if err != nil {
-		t.Fatalf("new keys err: %s", err)
+		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	now := time.Now()
-	prevTx, err := newTransaction1(pubkey, 10, now)
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
-
-	tx, err := newTransaction2(privkey, prevTx.Hash, 0, now.Add(-1*time.Minute))
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
-
+	tx.Timestamp = prevTx.Timestamp.Add(-1 * time.Minute)
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
@@ -157,20 +151,12 @@ func Test_Validate_Input_Time_Too_Late(t *testing.T) {
 }
 
 func Test_Validate_In_Sig_Mismatch(t *testing.T) {
-	_, pubkey, err := test.NewKeys()
+	prevTx, tx, err := newTransactionPair(0, 10, 0)
 	if err != nil {
-		t.Fatalf("new keys err: %s", err)
+		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	prevTx, err := newTransaction1(pubkey, 10, time.Now())
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
-
-	tx, err := newTransaction_Sig_Error(prevTx.Hash, 0, time.Now())
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
+	tx.Ins[0].Signature = []byte{}
 
 	txdb := newTransactionDB(prevTx)
 	service := service.NewTransactionService(txdb)
@@ -181,11 +167,10 @@ func Test_Validate_In_Sig_Mismatch(t *testing.T) {
 }
 
 func Test_Validate_Outs_Len_Not_Match(t *testing.T) {
-	var err error
 	ins := []*model.In{}
 	outs := []*model.Out{{}, {}}
 
-	tx, err := newTransaction_OutLen_Error(ins, outs, time.Now())
+	tx, err := newTransaction2(ins, outs, 0, 3)
 	if err != nil {
 		t.Fatalf("new transaction 4 error: %s", err)
 	}
@@ -199,20 +184,10 @@ func Test_Validate_Outs_Len_Not_Match(t *testing.T) {
 }
 
 func Test_Validate_Output_Value_Too_Large(t *testing.T) {
-	privkey, pubkey, err := test.NewKeys()
+	var prevVal uint64 = 10
+	prevTx, tx, err := newTransactionPair(0, prevVal, prevVal+1)
 	if err != nil {
-		t.Fatalf("new keys error: %s", err)
-	}
-
-	var val uint64 = 10
-	prevTx, err := newTransaction1(pubkey, val, time.Now())
-	if err != nil {
-		t.Fatalf("new prev transaction error: %s", err)
-	}
-
-	tx, err := newTransaction3(privkey, pubkey, prevTx.Hash, 0, val+1, time.Now())
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
+		t.Fatalf("new transaction pair error: %s", err)
 	}
 
 	txdb := newTransactionDB(prevTx)
@@ -224,22 +199,11 @@ func Test_Validate_Output_Value_Too_Large(t *testing.T) {
 }
 
 func Test_Validate_Success(t *testing.T) {
-	privkey, pubkey, err := test.NewKeys()
-	if err != nil {
-		t.Fatalf("new keys err: %s", err)
-	}
-
-	now := time.Now()
 	var totalInput uint64 = 10
-	prevTx, err := newTransaction1(pubkey, totalInput, now)
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
-
 	var totalOutput uint64 = 6
-	tx, err := newTransaction3(privkey, pubkey, prevTx.Hash, 0, totalOutput, time.Now())
+	prevTx, tx, err := newTransactionPair(0, totalInput, totalOutput)
 	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
+		t.Fatalf("new transaction pair error: %s", err)
 	}
 
 	txdb := newTransactionDB(prevTx)
@@ -255,7 +219,7 @@ func Test_Validate_Success(t *testing.T) {
 }
 
 func Test_Validate_Hash_Not_Change(t *testing.T) {
-	tx, err := newTransaction4([]*model.In{}, []*model.Out{}, time.Now())
+	tx, err := newTransaction1([]*model.In{}, []*model.Out{}, time.Now(), nil)
 	if err != nil {
 		t.Fatalf("new transaction 4 error: %s", err)
 	}
@@ -272,28 +236,7 @@ func Test_Validate_Hash_Not_Change(t *testing.T) {
 	}
 }
 
-func newTransaction1(pubkey []byte, val uint64, timestamp time.Time) (*model.Transaction, error) {
-	out := &model.Out{
-		Pubkey: pubkey,
-		Value:  val,
-	}
-	outs := []*model.Out{out}
-	tx := &model.Transaction{
-		InLen:     0,
-		OutLen:    uint32(len(outs)),
-		Ins:       []*model.In{},
-		Outs:      outs,
-		Timestamp: timestamp,
-	}
-	hash, err := tx.ComputeHash()
-	if err != nil {
-		return nil, err
-	}
-	tx.Hash = hash
-	return tx, nil
-}
-
-func newTransaction2(privkey, prevHash []byte, index uint32, timestamp time.Time) (*model.Transaction, error) {
+func newIns(privkey, prevHash []byte, index uint32) ([]*model.In, error) {
 	sig, err := cryptography.Sign(privkey, prevHash)
 	if err != nil {
 		return nil, err
@@ -306,64 +249,61 @@ func newTransaction2(privkey, prevHash []byte, index uint32, timestamp time.Time
 			Signature: sig,
 		},
 	}
-
-	tx := &model.Transaction{
-		InLen:     uint32(len(ins)),
-		OutLen:    0,
-		Ins:       ins,
-		Outs:      []*model.Out{},
-		Timestamp: timestamp,
-	}
-	hash, err := tx.ComputeHash()
-	if err != nil {
-		return nil, err
-	}
-	tx.Hash = hash
-	return tx, nil
+	return ins, nil
 }
 
-func newTransaction3(privkey, pubkey, prevHash []byte, index uint32, val uint64, timestamp time.Time) (*model.Transaction, error) {
-	sig, err := cryptography.Sign(privkey, prevHash)
+func newTransactionPair(index uint32, prevVal, val uint64) (*model.Transaction, *model.Transaction, error) {
+	privkey, pubkey, err := test.NewKeys()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	ins := []*model.In{
-		{
-			PrevHash:  prevHash,
-			Index:     index,
-			Signature: sig,
-		},
-	}
-
-	outs := []*model.Out{{
-		Pubkey: pubkey,
-		Value:  val,
-	}}
-
-	tx := &model.Transaction{
-		InLen:     uint32(len(ins)),
-		OutLen:    uint32(len(outs)),
-		Ins:       ins,
-		Outs:      outs,
-		Timestamp: timestamp,
-	}
-	hash, err := tx.ComputeHash()
+	blockHash, err := cryptography.Hash("block")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	tx.Hash = hash
-	return tx, nil
+
+	prevOuts := newOuts(pubkey, prevVal)
+	prevTx, err := newTransaction1([]*model.In{}, prevOuts, time.Now(), blockHash)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ins, err := newIns(privkey, prevTx.Hash, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	outs := newOuts(pubkey, val)
+	tx, err := newTransaction1(ins, outs, time.Now(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return prevTx, tx, nil
 }
 
-func newTransaction4(ins []*model.In, outs []*model.Out, timestamp time.Time) (*model.Transaction, error) {
+func newOuts(pubkey []byte, val uint64) []*model.Out {
+	outs := make([]*model.Out, 0)
+	if val > 0 {
+		out := &model.Out{
+			Pubkey: pubkey,
+			Value:  val,
+		}
+		outs = append(outs, out)
+	}
+	return outs
+}
+
+func newTransaction1(ins []*model.In, outs []*model.Out, timestamp time.Time, blockHash []byte) (*model.Transaction, error) {
 	tx := &model.Transaction{
 		InLen:     uint32(len(ins)),
 		OutLen:    uint32(len(outs)),
 		Ins:       ins,
 		Outs:      outs,
 		Timestamp: timestamp,
+		BlockHash: blockHash,
 	}
+
 	hash, err := tx.ComputeHash()
 	if err != nil {
 		return nil, err
@@ -372,58 +312,20 @@ func newTransaction4(ins []*model.In, outs []*model.Out, timestamp time.Time) (*
 	return tx, nil
 }
 
-func newTransaction_InLen_Error(ins []*model.In, outs []*model.Out, timestamp time.Time) (*model.Transaction, error) {
+func newTransaction2(ins []*model.In, outs []*model.Out, inlen, outlen uint32) (*model.Transaction, error) {
 	tx := &model.Transaction{
-		InLen:     uint32(len(ins)) - 1,
-		OutLen:    uint32(len(outs)),
+		InLen:     inlen,
+		OutLen:    outlen,
 		Ins:       ins,
 		Outs:      outs,
-		Timestamp: timestamp,
+		Timestamp: time.Now(),
 	}
+
 	hash, err := tx.ComputeHash()
 	if err != nil {
 		return nil, err
 	}
-	tx.Hash = hash
-	return tx, nil
-}
 
-func newTransaction_OutLen_Error(ins []*model.In, outs []*model.Out, timestamp time.Time) (*model.Transaction, error) {
-	tx := &model.Transaction{
-		InLen:     uint32(len(ins)),
-		OutLen:    uint32(len(outs)) - 1,
-		Ins:       ins,
-		Outs:      outs,
-		Timestamp: timestamp,
-	}
-	hash, err := tx.ComputeHash()
-	if err != nil {
-		return nil, err
-	}
-	tx.Hash = hash
-	return tx, nil
-}
-
-func newTransaction_Sig_Error(prevHash []byte, index uint32, timestamp time.Time) (*model.Transaction, error) {
-	ins := []*model.In{
-		{
-			PrevHash:  prevHash,
-			Index:     index,
-			Signature: []byte{},
-		},
-	}
-
-	tx := &model.Transaction{
-		InLen:     uint32(len(ins)),
-		OutLen:    0,
-		Ins:       ins,
-		Outs:      []*model.Out{},
-		Timestamp: timestamp,
-	}
-	hash, err := tx.ComputeHash()
-	if err != nil {
-		return nil, err
-	}
 	tx.Hash = hash
 	return tx, nil
 }

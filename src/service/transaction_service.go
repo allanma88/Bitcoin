@@ -56,11 +56,11 @@ func (service *TransactionService) Validate(tx *model.Transaction) (uint64, erro
 	return totalInput - totalOutput, nil
 }
 
-func (service *TransactionService) RemoveTxs(txs []*model.Transaction) {
+func (service *TransactionService) SaveTxs(txs []*model.Transaction) {
 	for _, tx := range txs {
-		err := service.ITransactionDB.RemoveTx(tx.Hash)
+		err := service.ITransactionDB.SaveTx(tx)
 		if err != nil {
-			log.Printf("remove tx %x error", tx.Hash)
+			log.Printf("save tx %x error", tx.Hash)
 		}
 	}
 }
@@ -86,8 +86,8 @@ func (service *TransactionService) validateInput(input *model.In, tx *model.Tran
 	if err != nil {
 		return 0, err
 	}
-	if prevTx == nil {
-		return 0, errors.ErrTxNotFound
+	if prevTx == nil || prevTx.BlockHash == nil || len(prevTx.BlockHash) == 0 {
+		return 0, errors.ErrPrevTxNotFound
 	}
 	if input.Index >= uint32(len(prevTx.Outs)) {
 		return 0, errors.ErrInLenOutOfIndex
