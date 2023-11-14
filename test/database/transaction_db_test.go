@@ -23,7 +23,7 @@ func Test_TransactionDB_Get(t *testing.T) {
 	}
 
 	txdb := database.NewTransactionDB(db)
-	err = txdb.SaveTx(tx)
+	err = txdb.SaveOffChainTx(tx)
 	if err != nil {
 		t.Fatalf("save transaction error: %v", err)
 	}

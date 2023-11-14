@@ -47,27 +47,6 @@ func (table *TestTable[T]) Remove(key []byte) error {
 	return nil
 }
 
-func (table *TestTable[T]) Last(n int) ([]*T, error) {
-	if n > len(table.Keys) {
-		n = len(table.Keys)
-	}
-
-	vals := make([]*T, 0, n)
-	for i := n; i > 0; i-- {
-		key := table.Keys[len(table.Keys)-i]
-		data := table.Items[key]
-
-		var val T
-		err := json.Unmarshal(data, &val)
-		if err != nil {
-			return nil, err
-		}
-		vals = append(vals, &val)
-	}
-
-	return vals, nil
-}
-
 type TestBaseDB[T any] struct {
 	Tables map[string]*TestTable[T]
 }
@@ -97,20 +76,22 @@ func (db *TestBaseDB[T]) Get(prefix, key []byte) (*T, error) {
 	return table.Get(key)
 }
 
-func (db *TestBaseDB[T]) Remove(prefix, key []byte) error {
-	table, ok := db.Tables[string(prefix)]
+func (db *TestBaseDB[T]) Move(oldPrefix, newPrefix, key []byte, val *T) error {
+	oldTable, ok := db.Tables[string(oldPrefix)]
 	if ok {
-		return table.Remove(key)
+		err := oldTable.Remove(key)
+		if err != nil {
+			return err
+		}
 	}
-	return nil
-}
 
-func (db *TestBaseDB[T]) Last(prefix []byte, n int) ([]*T, error) {
-	table, ok := db.Tables[string(prefix)]
-	if ok {
-		return table.Last(n)
+	table, ok := db.Tables[string(newPrefix)]
+	if !ok {
+		table = newTestTable[T]()
+		db.Tables[string(newPrefix)] = table
 	}
-	return nil, nil
+
+	return table.Save(key, val)
 }
 
 func (db *TestBaseDB[T]) Close() error {

@@ -64,7 +64,7 @@ func (s *BitcoinServer) AddTx(ctx context.Context, request *protocol.Transaction
 	log.Printf("validated transaction: %x", tx.Hash)
 	tx.Fee = fee
 
-	err = s.txService.SaveTx(tx)
+	err = s.txService.SaveOffChainTx(tx)
 	if err != nil {
 		log.Printf("save transaction %x failed: %v", tx.Hash, err)
 		return &protocol.TransactionReply{Result: false}, err
@@ -145,7 +145,10 @@ func (s *BitcoinServer) UpdateState() {
 		for i := uint64(0); i < s.cfg.BlocksPerDifficulty; i++ {
 			block := <-s.blockQueue
 
-			s.txService.SaveTxs(block.GetTxs())
+			err := s.txService.ChainOnTxs(block.GetTxs())
+			if err != nil {
+				log.Printf("chain on transaction err: %v", err)
+			}
 			s.state.Update(block.Id, block.Time)
 		}
 	}
@@ -179,7 +182,7 @@ func (s *BitcoinServer) receiveTxs(reward uint64) ([]*model.Transaction, error) 
 	txs := make([]*model.Transaction, MaxTxSizePerBlock)
 	var totalFee uint64 = 0
 	for i := 1; i < MaxTxSizePerBlock; i++ {
-		txs[i] = <-s.mineQueue
+		txs[i] = <-s.mineQueue //TODO: need to validate the tx again since tx maybe invalid when we start to mine the block
 		totalFee += txs[i].Fee
 	}
 

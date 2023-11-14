@@ -5,7 +5,7 @@ import (
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
-	"log"
+	syserrors "errors"
 )
 
 type TransactionService struct {
@@ -56,17 +56,25 @@ func (service *TransactionService) Validate(tx *model.Transaction) (uint64, erro
 	return totalInput - totalOutput, nil
 }
 
-func (service *TransactionService) SaveTxs(txs []*model.Transaction) {
+// TODO: test cases?
+func (service *TransactionService) ChainOnTxs(txs []*model.Transaction) error {
+	txerrors := make([]error, 0)
+
 	for _, tx := range txs {
-		err := service.ITransactionDB.SaveTx(tx)
+		err := service.ITransactionDB.SaveOnChainTx(tx)
 		if err != nil {
-			log.Printf("save tx %x error", tx.Hash)
+			txerrors = append(txerrors, err)
 		}
+	}
+
+	if len(txerrors) > 0 {
+		return syserrors.Join(txerrors...)
+	} else {
+		return nil
 	}
 }
 
 func (service *TransactionService) validateInputs(tx *model.Transaction) (uint64, error) {
-	//TODO: empty inputs should fail
 	if len(tx.Ins) != int(tx.InLen) {
 		return 0, errors.ErrInLenMismatch
 	}
@@ -82,11 +90,11 @@ func (service *TransactionService) validateInputs(tx *model.Transaction) (uint64
 }
 
 func (service *TransactionService) validateInput(input *model.In, tx *model.Transaction) (uint64, error) {
-	prevTx, err := service.GetTx(input.PrevHash)
+	prevTx, err := service.GetOnChainTx(input.PrevHash)
 	if err != nil {
 		return 0, err
 	}
-	if prevTx == nil || prevTx.BlockHash == nil || len(prevTx.BlockHash) == 0 {
+	if prevTx == nil {
 		return 0, errors.ErrPrevTxNotFound
 	}
 	if input.Index >= uint32(len(prevTx.Outs)) {

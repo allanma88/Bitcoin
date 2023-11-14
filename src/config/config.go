@@ -21,8 +21,8 @@ type Config struct {
 	DataDir             string   `yaml:"data_dir,omitempty"`
 	Endpoint            string   `yaml:"endpoint,omitempty"`
 	Bootstraps          []string `yaml:"bootstraps,omitempty"`
-	BlocksPerDifficulty uint64   `yaml:"blocks_per_difficulty,omitempty"` //TODO: switch to int
-	BlocksPerRewrad     uint64   `yaml:"blocks_per_reward,omitempty"`     //TODO: switch to int
+	BlocksPerDifficulty uint64   `yaml:"blocks_per_difficulty,omitempty"`
+	BlocksPerRewrad     uint64   `yaml:"blocks_per_reward,omitempty"`
 	BlockInterval       uint64   `yaml:"block_interval,omitempty"`
 	InitDifficultyLevel uint64   `yaml:"init_difficulty_level,omitempty"`
 	MinerPubkey         []byte   `yaml:"miner_address,omitempty"`

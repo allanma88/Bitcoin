@@ -48,7 +48,8 @@ func Test_Validate_Tx_Exists(t *testing.T) {
 		t.Fatalf("formalize transaction error: %s", err)
 	}
 
-	txdb := newTransactionDB(tx)
+	txdb := newTransactionDB()
+	txdb.SaveOnChainTx(tx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxExist) {
@@ -125,7 +126,8 @@ func Test_Validate_Input_PrevTx_Out_Chain_Found(t *testing.T) {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	txdb := newTransactionDB(prevTx)
+	txdb := newTransactionDB()
+	txdb.SaveOnChainTx(prevTx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrPrevTxNotFound) {
@@ -139,7 +141,8 @@ func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	txdb := newTransactionDB(prevTx)
+	txdb := newTransactionDB()
+	txdb.SaveOnChainTx(prevTx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxTooLate) {
@@ -153,7 +156,8 @@ func Test_Validate_Input_Time_Too_Late(t *testing.T) {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	txdb := newTransactionDB(prevTx)
+	txdb := newTransactionDB()
+	txdb.SaveOnChainTx(prevTx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxTooLate) {
@@ -194,7 +198,8 @@ func Test_Validate_In_Sig_Mismatch(t *testing.T) {
 		t.Fatalf("formalize transaction error: %s", err)
 	}
 
-	txdb := newTransactionDB(prevTx)
+	txdb := newTransactionDB()
+	txdb.SaveOnChainTx(prevTx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxSigInvalid) {
@@ -228,7 +233,8 @@ func Test_Validate_Output_Value_Too_Large(t *testing.T) {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	txdb := newTransactionDB(prevTx)
+	txdb := newTransactionDB()
+	txdb.SaveOnChainTx(prevTx)
 	service := service.NewTransactionService(txdb)
 	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrTxInsufficientCoins) {
@@ -244,7 +250,8 @@ func Test_Validate_Success(t *testing.T) {
 		t.Fatalf("new transaction pair error: %s", err)
 	}
 
-	txdb := newTransactionDB(prevTx)
+	txdb := newTransactionDB()
+	txdb.SaveOnChainTx(prevTx)
 	service := service.NewTransactionService(txdb)
 	fee, err := service.Validate(tx)
 	if err != nil {
@@ -269,9 +276,13 @@ func Test_Validate_Hash_Not_Change(t *testing.T) {
 
 	originalHash := tx.Hash
 
-	txdb := newTransactionDB(tx)
+	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
-	service.Validate(tx)
+	_, err = service.Validate(tx)
+	if err != nil {
+		t.Fatalf("validate transaction error: %s", err)
+	}
+
 	if bytes.Equal(originalHash, tx.Hash) {
 		t.Log("transaction hash didn't changed after serialize")
 	} else {
@@ -391,8 +402,5 @@ func formalizeTx(tx *model.Transaction) error {
 func newTransactionDB(txs ...*model.Transaction) database.ITransactionDB {
 	basedb := newTestBaseDB[model.Transaction]()
 	txdb := &database.TransactionDB{IBaseDB: basedb}
-	for _, tx := range txs {
-		txdb.SaveTx(tx)
-	}
 	return txdb
 }
