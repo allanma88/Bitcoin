@@ -10,11 +10,11 @@ const (
 )
 
 type State struct {
-	lock          sync.Mutex
-	totalInterval uint64
-	difficulty    float64
-	lastBlockId   uint64
-	lastBlockTime time.Time
+	lock            sync.Mutex
+	totalInterval   uint64
+	difficulty      float64
+	lastBlockNumber uint64
+	lastBlockTime   time.Time
 }
 
 func NewState(initDifficultyLevel uint64) *State {
@@ -24,12 +24,12 @@ func NewState(initDifficultyLevel uint64) *State {
 	}
 }
 
-func (state *State) Update(blockId uint64, blockTime time.Time) {
+func (state *State) Update(blockNumber uint64, blockTime time.Time) {
 	state.lock.Lock()
 	defer state.lock.Unlock()
 
 	state.totalInterval += uint64(blockTime.Sub(state.lastBlockTime).Milliseconds())
-	state.lastBlockId = blockId
+	state.lastBlockNumber = blockNumber
 	state.lastBlockTime = blockTime
 }
 
@@ -37,18 +37,18 @@ func (state *State) Get(blocksPerDifficulty, blocksPerRewrad uint64, expectBlock
 	state.lock.Lock()
 	defer state.lock.Unlock()
 
-	if state.lastBlockId%blocksPerDifficulty == 0 {
+	if state.lastBlockNumber%blocksPerDifficulty == 0 {
 		avgInterval := state.totalInterval / (blocksPerDifficulty)
 		state.difficulty = state.difficulty * float64((avgInterval / expectBlockInterval))
 		state.totalInterval = 0
 	}
-	reward := InitReward / (state.lastBlockId/blocksPerRewrad + 1)
+	reward := InitReward / (state.lastBlockNumber/blocksPerRewrad + 1)
 
-	return state.lastBlockId, reward, state.difficulty
+	return state.lastBlockNumber, reward, state.difficulty
 }
 
-func (state *State) GetLastBlockId() uint64 {
+func (state *State) GetLastBlockNumber() uint64 {
 	state.lock.Lock()
 	defer state.lock.Unlock()
-	return state.lastBlockId
+	return state.lastBlockNumber
 }

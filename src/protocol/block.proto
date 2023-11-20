@@ -29,7 +29,7 @@ service Block {
 
 // The transaction message containing the user's name.
 message BlockReq {
-  uint64 id = 1;
+  uint64 number = 1;
   bytes hash = 2;   
   bytes prevhash = 3;      
   bytes rootHash = 4;    

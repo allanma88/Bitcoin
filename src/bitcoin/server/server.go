@@ -109,7 +109,7 @@ func (s *BitcoinServer) AddBlock(ctx context.Context, request *protocol.BlockReq
 	log.Printf("saved block: %x", block.Hash)
 
 	go func() {
-		if s.state.GetLastBlockId()+1 == block.Id {
+		if s.state.GetLastBlockNumber()+1 == block.Number {
 			s.cancelFunc(errors.ErrServerCancelMining)
 		}
 		s.blockQueue <- block
@@ -149,7 +149,7 @@ func (s *BitcoinServer) UpdateState() {
 			if err != nil {
 				log.Printf("chain on transaction err: %v", err)
 			}
-			s.state.Update(block.Id, block.Time)
+			s.state.Update(block.Number, block.Time)
 		}
 	}
 }
@@ -157,7 +157,7 @@ func (s *BitcoinServer) UpdateState() {
 func (s *BitcoinServer) MineBlock(ctx context.Context) {
 	//TODO: stop mining when receive the next block
 	for {
-		lastBlockId, reward, difficulty := s.state.Get(s.cfg.BlocksPerDifficulty, s.cfg.BlocksPerRewrad, s.cfg.BlockInterval)
+		lastBlockNumber, reward, difficulty := s.state.Get(s.cfg.BlocksPerDifficulty, s.cfg.BlocksPerRewrad, s.cfg.BlockInterval)
 
 		txs, err := s.receiveTxs(reward)
 		if err != nil {
@@ -166,7 +166,7 @@ func (s *BitcoinServer) MineBlock(ctx context.Context) {
 			continue
 		}
 
-		block, err := s.blockService.MineBlock(lastBlockId, difficulty, txs, ctx)
+		block, err := s.blockService.MineBlock(lastBlockNumber, difficulty, txs, ctx)
 		if err != nil {
 			//TODO: maybe fatal err?
 			log.Printf("mine block error: %v", err)

@@ -18,7 +18,7 @@ import (
 )
 
 type Block struct {
-	Id         uint64                           `json:"id,omitempty"`
+	Number     uint64                           `json:"number,omitempty"`
 	Hash       []byte                           `json:"hash,omitempty"`
 	Prevhash   []byte                           `json:"prevhash,omitempty"`
 	RootHash   []byte                           `json:"roothash,omitempty"`
@@ -28,17 +28,19 @@ type Block struct {
 	Body       *merkle.MerkleTree[*Transaction] `json:"-"`
 }
 
+type prettyBlock struct {
+	Number     uint64    `json:"number,omitempty"`
+	Hash       string    `json:"hash,omitempty"`
+	Prevhash   string    `json:"prevhash,omitempty"`
+	RootHash   string    `json:"roothash,omitempty"`
+	Nonce      uint32    `json:"nonce,omitempty"`
+	Difficulty string    `json:"difficulty,omitempty"`
+	Timestamp  time.Time `json:"timestamp,omitempty"`
+}
+
 func (block *Block) MarshalJSON() ([]byte, error) {
-	var s = struct {
-		Id         uint64    `json:"id,omitempty"`
-		Hash       string    `json:"hash,omitempty"`
-		Prevhash   string    `json:"prevhash,omitempty"`
-		RootHash   string    `json:"roothash,omitempty"`
-		Nonce      uint32    `json:"nonce,omitempty"`
-		Difficulty string    `json:"difficulty,omitempty"`
-		Timestamp  time.Time `json:"timestamp,omitempty"`
-	}{
-		Id:         block.Id,
+	var s = prettyBlock{
+		Number:     block.Number,
 		Hash:       hex.EncodeToString(block.Hash),
 		Prevhash:   hex.EncodeToString(block.Prevhash),
 		RootHash:   hex.EncodeToString(block.RootHash),
@@ -50,22 +52,13 @@ func (block *Block) MarshalJSON() ([]byte, error) {
 }
 
 func (block *Block) UnmarshalJSON(data []byte) error {
-	var s struct {
-		Id         uint64    `json:"id,omitempty"`
-		Hash       string    `json:"hash,omitempty"`
-		Prevhash   string    `json:"prevhash,omitempty"`
-		RootHash   string    `json:"roothash,omitempty"`
-		Nonce      uint32    `json:"nonce,omitempty"`
-		Difficulty string    `json:"difficulty,omitempty"`
-		Timestamp  time.Time `json:"timestamp,omitempty"`
-	}
-
+	var s prettyBlock
 	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
 	}
 
-	block.Id = s.Id
+	block.Number = s.Number
 
 	block.Hash, err = hex.DecodeString(s.Hash)
 	if err != nil {

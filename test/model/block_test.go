@@ -20,7 +20,7 @@ import (
 )
 
 type testBlock struct {
-	Id         uint64    `json:"id,omitempty"`
+	Number     uint64    `json:"number,omitempty"`
 	Hash       string    `json:"hash,omitempty"`
 	Prevhash   string    `json:"prevhash,omitempty"`
 	RootHash   string    `json:"roothash,omitempty"`
@@ -30,8 +30,8 @@ type testBlock struct {
 }
 
 func (s *testBlock) equal(block *model.Block) (bool, string, string, string) {
-	if block.Id != s.Id {
-		return false, "id", fmt.Sprintf("%d", s.Id), fmt.Sprintf("%d", block.Id)
+	if block.Number != s.Number {
+		return false, "id", fmt.Sprintf("%d", s.Number), fmt.Sprintf("%d", block.Number)
 	}
 
 	actualHash := hex.EncodeToString(block.Hash)
@@ -233,7 +233,7 @@ func newBlockReq() *protocol.BlockReq {
 	}
 
 	block := &protocol.BlockReq{
-		Id:        1,
+		Number:    1,
 		Prevhash:  prevHash,
 		RootHash:  rootHash,
 		Nonce:     10,
@@ -253,8 +253,8 @@ func newBlockReq() *protocol.BlockReq {
 }
 
 func equal(req *protocol.BlockReq, block *model.Block) (bool, string, string, string) {
-	if block.Id != req.Id {
-		return false, "id", fmt.Sprintf("%d", req.Id), fmt.Sprintf("%d", block.Id)
+	if block.Number != req.Number {
+		return false, "id", fmt.Sprintf("%d", req.Number), fmt.Sprintf("%d", block.Number)
 	}
 
 	if !bytes.Equal(block.Hash, req.Hash) {

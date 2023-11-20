@@ -44,7 +44,7 @@ func Test_Block_Hash_Field_Order_Doesnot_Matter(t *testing.T) {
 	difficulty := bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(10))
 
 	block1 := &model.Block{
-		Id:         1,
+		Number:     1,
 		Prevhash:   hash,
 		RootHash:   hash,
 		Difficulty: difficulty,
@@ -52,10 +52,10 @@ func Test_Block_Hash_Field_Order_Doesnot_Matter(t *testing.T) {
 	}
 
 	block2 := &model.Block{
+		Number:     1,
 		RootHash:   hash,
 		Prevhash:   hash,
 		Time:       timestamp,
-		Id:         1,
 		Difficulty: difficulty,
 	}
 

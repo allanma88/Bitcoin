@@ -80,7 +80,7 @@ func NewTransaction(blockHash []byte) *model.Transaction {
 	return tx
 }
 
-func NewBlock(id uint64, difficultyLevel uint64) *model.Block {
+func NewBlock(number uint64, difficultyLevel uint64) *model.Block {
 	prevHash, err := cryptography.Hash("prev")
 	if err != nil {
 		log.Fatalf("compute prev hash error: %s", err)
@@ -100,7 +100,7 @@ func NewBlock(id uint64, difficultyLevel uint64) *model.Block {
 
 	block := &model.Block{
 		Prevhash:   prevHash,
-		Id:         id,
+		Number:     number,
 		RootHash:   rootHash,
 		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(difficultyLevel)),
 		Time:       time.Now(),
