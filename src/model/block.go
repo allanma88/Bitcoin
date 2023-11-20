@@ -1,9 +1,9 @@
 package model
 
 import (
-	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/errors"
+	"Bitcoin/src/infra"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/protocol"
 	"context"
@@ -132,7 +132,7 @@ func (block *Block) FindHash(ctx context.Context) ([]byte, error) {
 			return nil, err
 		}
 
-		actual := bitcoin.ComputeDifficulty(hash)
+		actual := infra.ComputeDifficulty(hash)
 		if actual <= block.Difficulty {
 			return hash, nil
 		}

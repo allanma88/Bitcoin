@@ -1,10 +1,10 @@
 package service
 
 import (
-	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
+	"Bitcoin/src/infra"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"bytes"
@@ -27,8 +27,8 @@ func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockCo
 	}
 }
 
-func (serv *BlockService) MineBlock(lastBlockNumber uint64, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
-	block, err := serv.MakeBlock(lastBlockNumber+1, difficulty, transactions, ctx)
+func (serv *BlockService) MineBlock(lastBlock *model.Block, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
+	block, err := serv.MakeBlock(lastBlock, difficulty, transactions, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -81,14 +81,15 @@ func (service *BlockService) Validate(block *model.Block) error {
 	return nil
 }
 
-func (service *BlockService) MakeBlock(number uint64, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
+func (service *BlockService) MakeBlock(lastBlock *model.Block, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
 	content, err := merkle.BuildTree(transactions)
 	if err != nil {
 		return nil, err
 	}
 
 	block := &model.Block{
-		Number:     number,
+		Number:     lastBlock.Number + 1,
+		Prevhash:   lastBlock.Hash,
 		RootHash:   content.Table[len(content.Table)-1][0].Hash,
 		Difficulty: difficulty,
 		Time:       time.Now().UTC(),
@@ -109,7 +110,7 @@ func (service *BlockService) MakeBlock(number uint64, difficulty float64, transa
 }
 
 func validateDifficulty(hash []byte, difficulty float64) error {
-	actual := bitcoin.ComputeDifficulty(hash)
+	actual := infra.ComputeDifficulty(hash)
 	if actual > difficulty {
 		return errors.ErrBlockNonceInvalid
 	}

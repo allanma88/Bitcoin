@@ -1,54 +1,55 @@
 package bitcoin
 
 import (
+	"Bitcoin/src/infra"
+	"Bitcoin/src/model"
 	"sync"
-	"time"
 )
 
 const (
 	InitReward = 50
 )
 
+//TODO: test case for this class
+
 type State struct {
-	lock            sync.Mutex
-	totalInterval   uint64
-	difficulty      float64
-	lastBlockNumber uint64
-	lastBlockTime   time.Time
+	lock          sync.Mutex
+	totalInterval uint64
+	difficulty    float64
+	lastBlock     *model.Block
 }
 
 func NewState(initDifficultyLevel uint64) *State {
 	return &State{
-		difficulty: ComputeDifficulty(MakeDifficulty(initDifficultyLevel)), //TODO: how to set when server restart?
+		difficulty: infra.ComputeDifficulty(infra.MakeDifficulty(initDifficultyLevel)), //TODO: how to set when server restart?
 		lock:       sync.Mutex{},
 	}
 }
 
-func (state *State) Update(blockNumber uint64, blockTime time.Time) {
+func (state *State) Update(lastBlock *model.Block) {
 	state.lock.Lock()
 	defer state.lock.Unlock()
 
-	state.totalInterval += uint64(blockTime.Sub(state.lastBlockTime).Milliseconds())
-	state.lastBlockNumber = blockNumber
-	state.lastBlockTime = blockTime
+	state.totalInterval += uint64(lastBlock.Time.Sub(state.lastBlock.Time).Milliseconds())
+	state.lastBlock = lastBlock
 }
 
-func (state *State) Get(blocksPerDifficulty, blocksPerRewrad uint64, expectBlockInterval uint64) (uint64, uint64, float64) {
+func (state *State) Get(blocksPerDifficulty, blocksPerRewrad, expectBlockInterval uint64) (uint64, float64) {
 	state.lock.Lock()
 	defer state.lock.Unlock()
 
-	if state.lastBlockNumber%blocksPerDifficulty == 0 {
+	if state.lastBlock.Number%blocksPerDifficulty == 0 {
 		avgInterval := state.totalInterval / (blocksPerDifficulty)
 		state.difficulty = state.difficulty * float64((avgInterval / expectBlockInterval))
 		state.totalInterval = 0
 	}
-	reward := InitReward / (state.lastBlockNumber/blocksPerRewrad + 1)
+	reward := InitReward / (state.lastBlock.Number/blocksPerRewrad + 1)
 
-	return state.lastBlockNumber, reward, state.difficulty
+	return reward, state.difficulty
 }
 
-func (state *State) GetLastBlockNumber() uint64 {
+func (state *State) GetLastBlock() *model.Block {
 	state.lock.Lock()
 	defer state.lock.Unlock()
-	return state.lastBlockNumber
+	return state.lastBlock
 }

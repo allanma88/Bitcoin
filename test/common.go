@@ -1,8 +1,8 @@
 package test
 
 import (
-	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/cryptography"
+	"Bitcoin/src/infra"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"context"
@@ -102,7 +102,7 @@ func NewBlock(number uint64, difficultyLevel uint64) *model.Block {
 		Prevhash:   prevHash,
 		Number:     number,
 		RootHash:   rootHash,
-		Difficulty: bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(difficultyLevel)),
+		Difficulty: infra.ComputeDifficulty(infra.MakeDifficulty(difficultyLevel)),
 		Time:       time.Now(),
 		Body:       tree,
 	}

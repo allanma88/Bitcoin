@@ -1,8 +1,8 @@
 package model
 
 import (
-	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/cryptography"
+	"Bitcoin/src/infra"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
@@ -131,7 +131,7 @@ func Test_Difficulty(t *testing.T) {
 	}
 
 	for z := uint64(1); z <= 5; z++ {
-		difficulty := bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(z))
+		difficulty := infra.ComputeDifficulty(infra.MakeDifficulty(z))
 		log.Printf("difficulty: %x", difficulty)
 
 		for k := z; k < z+5; k++ {
@@ -142,7 +142,7 @@ func Test_Difficulty(t *testing.T) {
 			}
 			t.Logf("hash: %x", hash)
 
-			actual := bitcoin.ComputeDifficulty(hash)
+			actual := infra.ComputeDifficulty(hash)
 			if actual > difficulty {
 				t.Fatalf("compute difficulty error, %v should smaller then %v, but actally greater", actual, difficulty)
 			}
@@ -203,7 +203,7 @@ func Test_Block_FindHash(t *testing.T) {
 		t.Fatalf("block %x nonce should not be 0", block.Hash)
 	}
 
-	difficulty := bitcoin.ComputeDifficulty(hash)
+	difficulty := infra.ComputeDifficulty(hash)
 	if difficulty > block.Difficulty {
 		t.Fatalf("the difficulty %.0f of block hash %x nonce > %.0f", difficulty, block.Hash, block.Difficulty)
 	}
@@ -247,7 +247,7 @@ func newBlockReq() *protocol.BlockReq {
 	}
 	block.Hash = hash
 
-	block.Difficulty = bitcoin.ComputeDifficulty(hash)
+	block.Difficulty = infra.ComputeDifficulty(hash)
 
 	return block
 }

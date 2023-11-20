@@ -1,8 +1,8 @@
 package crypto
 
 import (
-	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/cryptography"
+	"Bitcoin/src/infra"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"bytes"
@@ -41,7 +41,7 @@ func Test_Block_Hash_Field_Order_Doesnot_Matter(t *testing.T) {
 		t.Fatalf("hash string error: %v", err)
 	}
 	timestamp := time.Now()
-	difficulty := bitcoin.ComputeDifficulty(bitcoin.MakeDifficulty(10))
+	difficulty := infra.ComputeDifficulty(infra.MakeDifficulty(10))
 
 	block1 := &model.Block{
 		Number:     1,

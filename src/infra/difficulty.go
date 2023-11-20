@@ -1,4 +1,4 @@
-package bitcoin
+package infra
 
 import (
 	"math"
