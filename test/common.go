@@ -9,39 +9,37 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"log"
 	"time"
 )
 
-func NewKeys() ([]byte, []byte, error) {
+func NewKeys() ([]byte, []byte) {
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, nil, err
+		log.Fatalf("generate keys error: %s", err)
 	}
 	privkey, err := cryptography.EncodePrivateKey(privateKey)
 	if err != nil {
-		return nil, nil, err
+		log.Fatalf("encode private key error: %s", err)
 	}
 	pubkey, err := cryptography.EncodePublicKey(&privateKey.PublicKey)
 	if err != nil {
-		return nil, nil, err
+		log.Fatalf("encode public key error: %s", err)
 	}
-	return privkey, pubkey, nil
+	return privkey, pubkey
 }
 
-func NewTransaction() (*model.Transaction, error) {
-	privkey, pubkey, err := NewKeys()
-	if err != nil {
-		return nil, err
-	}
+func NewTransaction(blockHash []byte) *model.Transaction {
+	privkey, pubkey := NewKeys()
 
 	prevHash, err := cryptography.Hash("whatever")
 	if err != nil {
-		return nil, err
+		log.Fatalf("compute hash error: %s", err)
 	}
 
 	sig, err := cryptography.Sign(privkey, prevHash)
 	if err != nil {
-		return nil, err
+		log.Fatalf("sign prev hash error: %s", err)
 	}
 
 	ins := []*model.In{
@@ -57,40 +55,45 @@ func NewTransaction() (*model.Transaction, error) {
 		Value:  1,
 	}}
 
+	if blockHash == nil {
+		blockHash, err = cryptography.Hash("block")
+		if err != nil {
+			log.Fatalf("compute block hash error: %s", err)
+		}
+	}
+
 	tx := &model.Transaction{
 		InLen:     uint32(len(ins)),
 		OutLen:    uint32(len(outs)),
 		Ins:       ins,
 		Outs:      outs,
 		Timestamp: time.Now(),
+		BlockHash: blockHash,
 	}
 
 	hash, err := tx.ComputeHash()
 	if err != nil {
-		return nil, err
+		log.Fatalf("compute tx hash error: %s", err)
 	}
 	tx.Hash = hash
 
-	return tx, nil
+	return tx
 }
 
-func NewBlock(id uint64, difficultyLevel uint64) (*model.Block, error) {
+func NewBlock(id uint64, difficultyLevel uint64) *model.Block {
 	prevHash, err := cryptography.Hash("prev")
 	if err != nil {
-		return nil, err
+		log.Fatalf("compute prev hash error: %s", err)
 	}
 
 	txs := make([]*model.Transaction, 4)
 	for i := 0; i < len(txs); i++ {
-		txs[i], err = NewTransaction()
-		if err != nil {
-			return nil, err
-		}
+		txs[i] = NewTransaction(nil)
 	}
 
 	tree, err := merkle.BuildTree(txs)
 	if err != nil {
-		return nil, err
+		log.Fatalf("builder merkle tree error: %s", err)
 	}
 
 	rootHash := tree.Table[len(tree.Table)-1][0].Hash
@@ -106,9 +109,9 @@ func NewBlock(id uint64, difficultyLevel uint64) (*model.Block, error) {
 
 	hash, err := block.FindHash(context.TODO())
 	if err != nil {
-		return nil, err
+		log.Fatalf("find block hash error: %s", err)
 	}
 	block.Hash = hash
 
-	return block, nil
+	return block
 }

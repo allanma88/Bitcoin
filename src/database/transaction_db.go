@@ -57,9 +57,9 @@ func (db *TransactionDB) GetOnChainTx(hash []byte) (*model.Transaction, error) {
 	}
 
 	if tx != nil {
-		if tx.BlockHash == nil || len(tx.BlockHash) == 0 {
-			return nil, nil
+		if tx.BlockHash != nil && len(tx.BlockHash) > 0 {
+			return tx, nil
 		}
 	}
-	return tx, nil
+	return nil, nil
 }

@@ -15,11 +15,7 @@ import (
 )
 
 func Test_Transaction_ComputeHash_Hash_Not_Change(t *testing.T) {
-	tx, err := test.NewTransaction()
-	if err != nil {
-		t.Fatalf("new transaction error: %v", err)
-	}
-
+	tx := test.NewTransaction(nil)
 	hash, err := tx.ComputeHash()
 	if err != nil {
 		t.Fatalf("compute hash error: %v", err)
@@ -33,11 +29,7 @@ func Test_Transaction_ComputeHash_Hash_Not_Change(t *testing.T) {
 }
 
 func Test_Transaction_From(t *testing.T) {
-	req, err := newTransactionReq()
-	if err != nil {
-		t.Fatalf("new transaction request error: %s", err)
-	}
-
+	req := newTransactionReq()
 	tx := model.TransactionFrom(req)
 
 	if !equalTx(req, tx) {
@@ -46,11 +38,7 @@ func Test_Transaction_From(t *testing.T) {
 }
 
 func Test_Transaction_To(t *testing.T) {
-	tx, err := test.NewTransaction()
-	if err != nil {
-		t.Fatalf("new transaction request error: %s", err)
-	}
-
+	tx := test.NewTransaction(nil)
 	req := model.TransactionTo(tx)
 
 	if !equalTx(req, tx) {
@@ -59,11 +47,7 @@ func Test_Transaction_To(t *testing.T) {
 }
 
 func Test_Transaction_Marshal(t *testing.T) {
-	tx, err := test.NewTransaction()
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
-
+	tx := test.NewTransaction(nil)
 	data, err := json.Marshal(tx)
 	if err != nil {
 		t.Fatalf("marshal error: %s", err)
@@ -90,20 +74,17 @@ func Test_Transaction_Unmarshal(t *testing.T) {
 	}
 }
 
-func newTransactionReq() (*protocol.TransactionReq, error) {
-	privkey, pubkey, err := test.NewKeys()
-	if err != nil {
-		return nil, err
-	}
+func newTransactionReq() *protocol.TransactionReq {
+	privkey, pubkey := test.NewKeys()
 
 	prevHash, err := cryptography.Hash("whatever")
 	if err != nil {
-		return nil, err
+		log.Fatalf("compute hash error: %v", err)
 	}
 
 	sig, err := cryptography.Sign(privkey, prevHash)
 	if err != nil {
-		return nil, err
+		log.Fatalf("sign prev hash error: %v", err)
 	}
 
 	ins := []*protocol.InReq{
@@ -127,7 +108,7 @@ func newTransactionReq() (*protocol.TransactionReq, error) {
 		Time:   time.Now().UnixMilli(),
 	}
 
-	return tx, nil
+	return tx
 }
 
 func equalTx(req *protocol.TransactionReq, tx *model.Transaction) bool {

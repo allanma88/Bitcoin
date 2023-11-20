@@ -145,7 +145,7 @@ func (s *BitcoinServer) UpdateState() {
 		for i := uint64(0); i < s.cfg.BlocksPerDifficulty; i++ {
 			block := <-s.blockQueue
 
-			err := s.txService.ChainOnTxs(block.GetTxs())
+			err := s.txService.ChainOnTxs(block.GetTxs()...)
 			if err != nil {
 				log.Printf("chain on transaction err: %v", err)
 			}

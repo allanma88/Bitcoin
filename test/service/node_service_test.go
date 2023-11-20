@@ -19,11 +19,7 @@ func Test_SendTx_Check_Nodes(t *testing.T) {
 	}
 	nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 
-	tx, err := test.NewTransaction()
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
-
+	tx := test.NewTransaction([]byte{})
 	cfg := &config.Config{
 		Endpoint: "localhost:5000",
 	}
@@ -61,11 +57,7 @@ func Test_SendTx_Not_Remove_Failed_Not_Enough_Nodes(t *testing.T) {
 		serv.AddNodes(nodes...)
 		serv.AddNodes(failNodes...)
 
-		tx, err := test.NewTransaction()
-		if err != nil {
-			t.Fatalf("new transaction error: %s", err)
-		}
-
+		tx := test.NewTransaction([]byte{})
 		for i := 0; i < sendCount; i++ {
 			serv.SendTx(tx)
 
@@ -108,11 +100,7 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 		serv.AddNodes(nodes...)
 		serv.AddNodes(failNodes...)
 
-		tx, err := test.NewTransaction()
-		if err != nil {
-			t.Fatalf("new transaction error: %s", err)
-		}
-
+		tx := test.NewTransaction([]byte{})
 		for i := 0; i < sendCount; i++ {
 			serv.SendTx(tx)
 
@@ -159,11 +147,7 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 	serv.AddNodes(nodes...)
 	serv.AddNodes(probablyFailNodes...)
 
-	tx, err := test.NewTransaction()
-	if err != nil {
-		t.Fatalf("new transaction error: %s", err)
-	}
-
+	tx := test.NewTransaction([]byte{})
 	for i := 0; i < service.MaxFailedCount*2; i++ {
 		serv.SendTx(tx)
 

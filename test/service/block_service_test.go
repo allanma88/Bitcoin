@@ -11,16 +11,12 @@ import (
 )
 
 func Test_Validate_Succeed(t *testing.T) {
-	block, err := test.NewBlock(1, 10)
-	if err != nil {
-		t.Fatalf("make block error: %v", err)
-	}
-
+	block := test.NewBlock(1, 10)
 	blockdb := newBlockDB()
 	blockContentDB := newBlockContentDB()
 	serv := service.NewBlockService(blockdb, blockContentDB, &config.Config{})
 
-	err = serv.Validate(block)
+	err := serv.Validate(block)
 	if err != nil {
 		t.Fatalf("validate block failed: %v", err)
 	}

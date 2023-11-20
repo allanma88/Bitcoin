@@ -66,11 +66,7 @@ func (s *testBlock) equal(block *model.Block) (bool, string, string, string) {
 }
 
 func Test_Block_ComputeHash_Hash_Not_Change(t *testing.T) {
-	block, err := test.NewBlock(1, 10)
-	if err != nil {
-		t.Fatalf("new block error: %v", err)
-	}
-
+	block := test.NewBlock(1, 10)
 	hash, err := block.ComputeHash()
 	if err != nil {
 		t.Fatalf("compute hash error: %v", err)
@@ -84,11 +80,7 @@ func Test_Block_ComputeHash_Hash_Not_Change(t *testing.T) {
 }
 
 func Test_Block_Marshal(t *testing.T) {
-	block, err := test.NewBlock(1, 10)
-	if err != nil {
-		t.Fatalf("new block error: %v", err)
-	}
-
+	block := test.NewBlock(1, 10)
 	data, err := json.Marshal(block)
 	if err != nil {
 		t.Fatalf("marshal error: %v", err)
@@ -159,11 +151,7 @@ func Test_Difficulty(t *testing.T) {
 }
 
 func Test_Block_From(t *testing.T) {
-	req, err := newBlockReq()
-	if err != nil {
-		t.Fatalf("new block req err: %v", err)
-	}
-
+	req := newBlockReq()
 	block, err := model.BlockFrom(req)
 	if err != nil {
 		t.Fatalf("block from err: %v", err)
@@ -181,11 +169,7 @@ func Test_Block_From(t *testing.T) {
 }
 
 func Test_Block_To(t *testing.T) {
-	block, err := test.NewBlock(1, 10)
-	if err != nil {
-		t.Fatalf("new block err: %v", err)
-	}
-
+	block := test.NewBlock(1, 10)
 	req, err := model.BlockTo(block)
 	if err != nil {
 		t.Fatalf("block to err: %v", err)
@@ -209,11 +193,7 @@ func Test_Block_To(t *testing.T) {
 }
 
 func Test_Block_FindHash(t *testing.T) {
-	block, err := test.NewBlock(1, 10)
-	if err != nil {
-		t.Fatalf("new block err: %v", err)
-	}
-
+	block := test.NewBlock(1, 10)
 	hash, err := block.FindHash(context.TODO())
 	if err != nil {
 		t.Fatalf("find hash err: %v", err)
@@ -229,30 +209,27 @@ func Test_Block_FindHash(t *testing.T) {
 	}
 }
 
-func newBlockReq() (*protocol.BlockReq, error) {
+func newBlockReq() *protocol.BlockReq {
 	prevHash, err := cryptography.Hash("prev")
 	if err != nil {
-		return nil, err
+		log.Fatalf("compute prev hash err: %v", err)
 	}
 
 	txs := make([]*model.Transaction, 4)
 	for i := 0; i < len(txs); i++ {
-		txs[i], err = test.NewTransaction()
-		if err != nil {
-			return nil, err
-		}
+		txs[i] = test.NewTransaction(nil)
 	}
 
 	tree, err := merkle.BuildTree(txs)
 	if err != nil {
-		return nil, err
+		log.Fatalf("build merkle tree err: %v", err)
 	}
 
 	rootHash := tree.Table[len(tree.Table)-1][0].Hash
 
 	content, err := json.Marshal(tree)
 	if err != nil {
-		return nil, err
+		log.Fatalf("marshal tree err: %v", err)
 	}
 
 	block := &protocol.BlockReq{
@@ -266,13 +243,13 @@ func newBlockReq() (*protocol.BlockReq, error) {
 
 	hash, err := cryptography.Hash(block)
 	if err != nil {
-		return nil, err
+		log.Fatalf("compute block hash err: %v", err)
 	}
 	block.Hash = hash
 
 	block.Difficulty = bitcoin.ComputeDifficulty(hash)
 
-	return block, nil
+	return block
 }
 
 func equal(req *protocol.BlockReq, block *model.Block) (bool, string, string, string) {

@@ -17,11 +17,7 @@ func Test_TransactionDB_Get(t *testing.T) {
 
 	defer cleanUp(db, DBPath)
 
-	tx, err := test.NewTransaction()
-	if err != nil {
-		t.Fatalf("new transaction error: %v", err)
-	}
-
+	tx := test.NewTransaction([]byte{})
 	txdb := database.NewTransactionDB(db)
 	err = txdb.SaveOffChainTx(tx)
 	if err != nil {

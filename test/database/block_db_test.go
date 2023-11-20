@@ -17,10 +17,7 @@ func Test_BlockDB_Get(t *testing.T) {
 
 	defer cleanUp(db, DBPath)
 
-	block, err := test.NewBlock(1, 10)
-	if err != nil {
-		t.Fatalf("new block error: %s", err)
-	}
+	block := test.NewBlock(1, 10)
 
 	blockdb := database.NewBlockDB(db)
 	err = blockdb.SaveBlock(block)
