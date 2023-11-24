@@ -46,6 +46,7 @@ func main() {
 	go server.BroadcastTx()
 	go server.BroadcastBlock()
 	go server.UpdateState()
+	go server.PullBlocks()
 
 	listener, err := net.Listen("tcp", cfg.Endpoint)
 	if err != nil {

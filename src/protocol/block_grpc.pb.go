@@ -22,8 +22,9 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BlockClient interface {
-	// add a new block
-	AddBlock(ctx context.Context, in *BlockReq, opts ...grpc.CallOption) (*BlockReply, error)
+	// find a new block
+	NewBlock(ctx context.Context, in *BlockReq, opts ...grpc.CallOption) (*BlockReply, error)
+	GetBlocks(ctx context.Context, in *GetBlocksReq, opts ...grpc.CallOption) (*GetBlocksReply, error)
 }
 
 type blockClient struct {
@@ -34,9 +35,18 @@ func NewBlockClient(cc grpc.ClientConnInterface) BlockClient {
 	return &blockClient{cc}
 }
 
-func (c *blockClient) AddBlock(ctx context.Context, in *BlockReq, opts ...grpc.CallOption) (*BlockReply, error) {
+func (c *blockClient) NewBlock(ctx context.Context, in *BlockReq, opts ...grpc.CallOption) (*BlockReply, error) {
 	out := new(BlockReply)
-	err := c.cc.Invoke(ctx, "/protocol.Block/AddBlock", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/protocol.Block/NewBlock", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blockClient) GetBlocks(ctx context.Context, in *GetBlocksReq, opts ...grpc.CallOption) (*GetBlocksReply, error) {
+	out := new(GetBlocksReply)
+	err := c.cc.Invoke(ctx, "/protocol.Block/GetBlocks", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +57,9 @@ func (c *blockClient) AddBlock(ctx context.Context, in *BlockReq, opts ...grpc.C
 // All implementations must embed UnimplementedBlockServer
 // for forward compatibility
 type BlockServer interface {
-	// add a new block
-	AddBlock(context.Context, *BlockReq) (*BlockReply, error)
+	// find a new block
+	NewBlock(context.Context, *BlockReq) (*BlockReply, error)
+	GetBlocks(context.Context, *GetBlocksReq) (*GetBlocksReply, error)
 	mustEmbedUnimplementedBlockServer()
 }
 
@@ -56,8 +67,11 @@ type BlockServer interface {
 type UnimplementedBlockServer struct {
 }
 
-func (UnimplementedBlockServer) AddBlock(context.Context, *BlockReq) (*BlockReply, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddBlock not implemented")
+func (UnimplementedBlockServer) NewBlock(context.Context, *BlockReq) (*BlockReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method NewBlock not implemented")
+}
+func (UnimplementedBlockServer) GetBlocks(context.Context, *GetBlocksReq) (*GetBlocksReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBlocks not implemented")
 }
 func (UnimplementedBlockServer) mustEmbedUnimplementedBlockServer() {}
 
@@ -72,20 +86,38 @@ func RegisterBlockServer(s grpc.ServiceRegistrar, srv BlockServer) {
 	s.RegisterService(&Block_ServiceDesc, srv)
 }
 
-func _Block_AddBlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Block_NewBlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BlockReq)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(BlockServer).AddBlock(ctx, in)
+		return srv.(BlockServer).NewBlock(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/protocol.Block/AddBlock",
+		FullMethod: "/protocol.Block/NewBlock",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BlockServer).AddBlock(ctx, req.(*BlockReq))
+		return srv.(BlockServer).NewBlock(ctx, req.(*BlockReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Block_GetBlocks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBlocksReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlockServer).GetBlocks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protocol.Block/GetBlocks",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlockServer).GetBlocks(ctx, req.(*GetBlocksReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -98,8 +130,12 @@ var Block_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*BlockServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "AddBlock",
-			Handler:    _Block_AddBlock_Handler,
+			MethodName: "NewBlock",
+			Handler:    _Block_NewBlock_Handler,
+		},
+		{
+			MethodName: "GetBlocks",
+			Handler:    _Block_GetBlocks_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

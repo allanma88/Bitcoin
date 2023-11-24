@@ -21,13 +21,12 @@ option java_outer_classname = "HelloWorldProto";
 
 package protocol;
 
-// The transaction service definition.
 service Block {
-  // add a new block
-  rpc AddBlock (BlockReq) returns (BlockReply) {}
+  // find a new block
+  rpc NewBlock (BlockReq) returns (BlockReply) {}
+  rpc GetBlocks (GetBlocksReq) returns (GetBlocksReply) {}
 }
 
-// The transaction message containing the user's name.
 message BlockReq {
   uint64 number = 1;
   bytes hash = 2;   
@@ -36,11 +35,24 @@ message BlockReq {
   uint32 nonce = 5;
   double difficulty = 6;       
   int64 timestamp = 7;
-  repeated string nodes = 8;
-  bytes content = 9;
+  bytes content = 8;
+  string node = 9;
 }
 
 // The response message containing the greetings
 message BlockReply {
   bool result = 1;
+}
+
+
+// The transaction message containing the user's name.
+message GetBlocksReq {
+  uint64 blocknumber = 1;
+  bytes blockhash = 2;
+}
+
+// The response message containing the greetings
+message GetBlocksReply {
+  repeated BlockReq blocks = 1;
+  uint64 end = 2;
 }

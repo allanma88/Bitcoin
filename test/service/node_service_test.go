@@ -44,7 +44,7 @@ func Test_SendTx_Not_Remove_Failed_Not_Enough_Nodes(t *testing.T) {
 		return &FailedBitcoinClient{txChannel: channel}
 	}
 
-	sendCounts := []int{service.MaxFailedCount - 2, service.MaxFailedCount - 1, service.MaxFailedCount - 5}
+	sendCounts := []int{model.MaxFailedCount - 2, model.MaxFailedCount - 1, model.MaxFailedCount - 5}
 	for _, sendCount := range sendCounts {
 		channels := make(map[string]TxChannel)
 		nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
@@ -87,7 +87,7 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 		return &FailedBitcoinClient{txChannel: channel}
 	}
 
-	sendCounts := []int{service.MaxFailedCount, service.MaxFailedCount + 1, service.MaxFailedCount + 10}
+	sendCounts := []int{model.MaxFailedCount, model.MaxFailedCount + 1, model.MaxFailedCount + 10}
 	for _, sendCount := range sendCounts {
 		channels := make(map[string]TxChannel)
 		nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
@@ -110,7 +110,7 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 			}
 
 			expect := len(channels)
-			if i >= service.MaxFailedCount {
+			if i >= model.MaxFailedCount {
 				expect = len(channels) - len(failNodes)
 			}
 
@@ -148,7 +148,7 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 	serv.AddNodes(probablyFailNodes...)
 
 	tx := test.NewTransaction([]byte{})
-	for i := 0; i < service.MaxFailedCount*2; i++ {
+	for i := 0; i < model.MaxFailedCount*2; i++ {
 		serv.SendTx(tx)
 
 		_, err := checkNodes(channels, cfg.Endpoint)
@@ -295,6 +295,10 @@ func (client *TestBitcoinClient) SendBlock(req *protocol.BlockReq) (*protocol.Bl
 	return &protocol.BlockReply{Result: true}, nil
 }
 
+func (cli *TestBitcoinClient) GetBlocks(req *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
+	return nil, errors.New("not implemented")
+}
+
 type FailedBitcoinClient struct {
 	txChannel    chan *protocol.TransactionReq
 	blockChannel chan *protocol.BlockReq
@@ -308,6 +312,10 @@ func (client *FailedBitcoinClient) SendTx(req *protocol.TransactionReq) (*protoc
 func (client *FailedBitcoinClient) SendBlock(req *protocol.BlockReq) (*protocol.BlockReply, error) {
 	// client.channel <- req
 	return &protocol.BlockReply{Result: false}, errors.New("send tx failed")
+}
+
+func (cli *FailedBitcoinClient) GetBlocks(req *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
+	return nil, errors.New("not implemented")
 }
 
 type ProbablyFailedBitcoinClient struct {
@@ -337,4 +345,8 @@ func (client *ProbablyFailedBitcoinClient) SendBlock(req *protocol.BlockReq) (*p
 		// client.channel <- req
 		return &protocol.BlockReply{Result: true}, nil
 	}
+}
+
+func (cli *ProbablyFailedBitcoinClient) GetBlocks(req *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
+	return nil, errors.New("not implemented")
 }

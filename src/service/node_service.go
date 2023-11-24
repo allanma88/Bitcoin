@@ -2,6 +2,7 @@ package service
 
 import (
 	"Bitcoin/src/bitcoin/client"
+	"Bitcoin/src/collection"
 	"Bitcoin/src/config"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
@@ -15,28 +16,27 @@ import (
 const (
 	//node
 	MaxBroadcastNodes = 10
-	MaxFailedCount    = 10
 )
 
 //TODO: maybe we can use more complex policy to remove inactive nodes
 
 type NodeService struct {
 	lock  sync.RWMutex
-	nodes map[string]*model.Node
+	nodes *collection.ListMap[string, *model.Node]
 	cfg   *config.Config
 }
 
-type sendFunc[T any] func(cli client.IBitcoinClient, req T) error
+type sendFunc[Q, R any] func(cli client.IBitcoinClient, req Q) (R, error)
 
 func NewNodeService(cfg *config.Config) *NodeService {
 	service := &NodeService{
 		lock:  sync.RWMutex{},
-		nodes: make(map[string]*model.Node),
+		nodes: collection.NewListMap[string, *model.Node](),
 		cfg:   cfg,
 	}
 	if cfg.Bootstraps != nil {
-		for _, node := range cfg.Bootstraps {
-			service.nodes[node] = &model.Node{Addr: node}
+		for _, addr := range cfg.Bootstraps {
+			service.nodes.Set(addr, &model.Node{Addr: addr})
 		}
 	}
 	return service
@@ -59,91 +59,94 @@ func (service *NodeService) AddNodes(nodes ...*model.Node) error {
 		if node == nil {
 			log.Fatalf("node is nil")
 		}
-		_, has := service.nodes[node.Addr]
-		if has {
-			return fmt.Errorf("the node %s already exists", node.Addr)
-		}
-		service.nodes[node.Addr] = node
+		service.nodes.Set(node.Addr, node)
 	}
 	return nil
 }
 
+// TODO: remove?
 func (service *NodeService) GetNode(addr string) *model.Node {
-	return service.nodes[addr]
+	return service.nodes.Get(addr)
 }
 
 func (service *NodeService) SendTx(tx *model.Transaction) {
-	addrs := service.RandomPick(MaxBroadcastNodes)
-	req := model.TransactionTo(tx)
-	req.Nodes = addrs
-
-	send := func(cli client.IBitcoinClient, req *protocol.TransactionReq) error {
-		_, err := cli.SendTx(req)
-		return err
+	send := func(cli client.IBitcoinClient, req *protocol.TransactionReq) (*protocol.TransactionReply, error) {
+		return cli.SendTx(req)
 	}
 
-	sendReq[*protocol.TransactionReq](service, req, send)
+	req := model.TransactionTo(tx)
+	req.Nodes = service.RandomPick(MaxBroadcastNodes)
+
+	broadcastReq[*protocol.TransactionReq](service, req, send)
 }
 
 func (service *NodeService) SendBlock(block *model.Block) {
-	addrs := service.RandomPick(MaxBroadcastNodes)
-	req, err := model.BlockTo(block)
+	send := func(cli client.IBitcoinClient, req *protocol.BlockReq) (*protocol.BlockReply, error) {
+		return cli.SendBlock(req)
+	}
+
+	blockReq, err := model.BlockTo(block)
 	if err != nil {
 		log.Printf("convert to block request error: %v", err)
 		return
 	}
-	req.Nodes = addrs
 
-	send := func(cli client.IBitcoinClient, req *protocol.BlockReq) error {
-		_, err := cli.SendBlock(req)
-		return err
-	}
-
-	sendReq[*protocol.BlockReq](service, req, send)
+	broadcastReq[*protocol.BlockReq](service, blockReq, send)
 }
 
-func sendReq[T any](service *NodeService, req T, send sendFunc[T]) {
-	deleted := make([]string, 0, len(service.nodes))
+// TODO: test cases
+func (service *NodeService) GetBlocks(blockNumber uint64, blockHash []byte, addr string) ([]*protocol.BlockReq, uint64, error) {
+	req := &protocol.GetBlocksReq{
+		Blocknumber: blockNumber,
+		Blockhash:   blockHash,
+	}
+	node := service.nodes.Get(addr)
+	reply, err := node.Client.GetBlocks(req)
+	removed := node.UpdateState(err)
+
+	if removed {
+		service.lock.Lock()
+		service.nodes.Remove(addr)
+		service.lock.Unlock()
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	return reply.Blocks, reply.End, nil
+}
+
+func broadcastReq[Q, R any](service *NodeService, req Q, send sendFunc[Q, R]) {
+	deleted := make([]string, 0, service.nodes.Len())
 	wg := &sync.WaitGroup{}
 
-	for _, node := range service.nodes {
+	key := service.nodes.First()
+	for i := 0; i < service.nodes.Len(); i++ {
+		node := service.nodes.Get(key)
 		wg.Add(1)
 		go func(n *model.Node) {
-			err := send(n.Client, req)
-			if err != nil {
-				log.Printf("sent transaction failed: %v", err)
-				n.Failed++
-				if n.Failed >= MaxFailedCount {
-					deleted = append(deleted, n.Addr)
-				}
-			} else {
-				if n.Failed > 0 {
-					n.Failed--
-				}
+			_, err := send(n.Client, req)
+			removed := n.UpdateState(err)
+			if removed {
+				deleted = append(deleted, n.Addr)
 			}
 			wg.Done()
-			// log.Printf("sent transaction result: %v", reply.Result)
 		}(node)
+		key = service.nodes.Next(key)
 	}
 	wg.Wait()
 
 	service.lock.Lock()
 	for _, node := range deleted {
-		delete(service.nodes, node)
+		service.nodes.Remove(node)
 	}
 	service.lock.Unlock()
 }
 
 func (service *NodeService) RandomPick(n int) []string {
-	addrs := make([]string, 0, len(service.nodes))
-
-	if n > len(service.nodes) {
-		n = len(addrs)
-	}
-
 	service.lock.RLock()
-	for k := range service.nodes {
-		addrs = append(addrs, k)
+	addrs := service.nodes.Keys()
+	if n > len(addrs) {
+		n = len(addrs)
 	}
 	service.lock.RUnlock()
 

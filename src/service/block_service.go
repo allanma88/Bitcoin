@@ -27,17 +27,8 @@ func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockCo
 	}
 }
 
-func (serv *BlockService) MineBlock(lastBlock *model.Block, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
-	block, err := serv.MakeBlock(lastBlock, difficulty, transactions, ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	err = serv.SaveBlock(block)
-	if err != nil {
-		return nil, err
-	}
-	return block, nil
+func (service *BlockService) GetBlocks() []*model.Block {
+	return nil
 }
 
 func (service *BlockService) SaveBlock(block *model.Block) error {
@@ -68,6 +59,17 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return errors.ErrBlockExist
 	}
 
+	prevBlock, err := service.blockDB.GetBlock(block.Prevhash)
+	if err != nil {
+		return err
+	}
+	if prevBlock == nil {
+		return errors.ErrPrevBlockNotFound
+	}
+	if block.Number != prevBlock.Number+1 {
+		return errors.ErrBlockNumberInvalid
+	}
+
 	err = validateDifficulty(block.Hash, block.Difficulty)
 	if err != nil {
 		return err
@@ -79,6 +81,19 @@ func (service *BlockService) Validate(block *model.Block) error {
 	}
 
 	return nil
+}
+
+func (serv *BlockService) MineBlock(lastBlock *model.Block, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
+	block, err := serv.MakeBlock(lastBlock, difficulty, transactions, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = serv.SaveBlock(block)
+	if err != nil {
+		return nil, err
+	}
+	return block, nil
 }
 
 func (service *BlockService) MakeBlock(lastBlock *model.Block, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
