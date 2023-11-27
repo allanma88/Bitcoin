@@ -18,14 +18,15 @@ const (
 )
 
 type Config struct {
-	DataDir             string   `yaml:"data_dir,omitempty"`
-	Endpoint            string   `yaml:"endpoint,omitempty"`
-	Bootstraps          []string `yaml:"bootstraps,omitempty"`
-	BlocksPerDifficulty uint64   `yaml:"blocks_per_difficulty,omitempty"`
-	BlocksPerRewrad     uint64   `yaml:"blocks_per_reward,omitempty"`
-	BlockInterval       uint64   `yaml:"block_interval,omitempty"`
-	InitDifficultyLevel uint64   `yaml:"init_difficulty_level,omitempty"`
-	MinerPubkey         []byte   `yaml:"miner_address,omitempty"`
+	Server              string
+	DataDir             string
+	Endpoint            string
+	Bootstraps          []string
+	BlocksPerDifficulty uint64
+	BlocksPerRewrad     uint64
+	BlockInterval       uint64
+	InitDifficultyLevel uint64
+	MinerPubkey         []byte
 }
 
 // TODO: need more test cases
@@ -36,6 +37,7 @@ func Read(path string) (*Config, error) {
 	}
 
 	var s struct {
+		Server              string   `yaml:"server,omitempty"`
 		DataDir             string   `yaml:"data_dir,omitempty"`
 		Endpoint            string   `yaml:"endpoint,omitempty"`
 		Bootstraps          []string `yaml:"bootstraps,omitempty"`
@@ -58,6 +60,10 @@ func Read(path string) (*Config, error) {
 	}
 	if strings.Trim(s.MinerAddress, "") == "" {
 		return nil, errors.New("the miner address is empty")
+	}
+
+	if strings.Trim(s.Server, "") == "" {
+		s.Server = s.Endpoint
 	}
 
 	var config Config

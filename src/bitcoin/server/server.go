@@ -1,15 +1,16 @@
 package server
 
 import (
-	"Bitcoin/src/bitcoin"
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"Bitcoin/src/service"
+	"bytes"
 	"context"
 	"log"
+	"sync"
 )
 
 const (
@@ -24,7 +25,8 @@ const (
 type BitcoinServer struct {
 	protocol.TransactionServer
 	protocol.BlockServer
-	state               *bitcoin.State
+	lastBlock           *model.Block
+	lastBlocks          map[string]*model.Block
 	cfg                 *config.Config
 	nodeService         *service.NodeService
 	txService           *service.TransactionService
@@ -35,6 +37,7 @@ type BitcoinServer struct {
 	mineQueue           chan *model.Transaction
 	pullBlockQueue      chan string
 	cancelFunc          context.CancelCauseFunc
+	lock                sync.Mutex
 }
 
 func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
@@ -48,8 +51,10 @@ func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb 
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
 		mineQueue:           make(chan *model.Transaction, MaxTxSizePerBlock),
 		pullBlockQueue:      make(chan string, PullBlockQueueSize),
-		state:               bitcoin.NewState(cfg.InitDifficultyLevel), //TODO: how to set when server restart?
+		lastBlock:           nil, //TODO: how to set when server restart?
+		lastBlocks:          make(map[string]*model.Block),
 		cancelFunc:          cancelFunc,
+		lock:                sync.Mutex{},
 	}
 	return server, nil
 }
@@ -92,6 +97,8 @@ func (s *BitcoinServer) AddTx(ctx context.Context, request *protocol.Transaction
 
 func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq) (*protocol.BlockReply, error) {
 	block, err := s.addBlock(request)
+	//if the prev block doesn't exist, then maybe we fall behind with current chain or a new main chain show up,
+	// so we need sync with the request node
 	if err == errors.ErrPrevBlockNotFound {
 		go func() {
 			s.pullBlockQueue <- request.Node
@@ -102,15 +109,9 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 	}
 
 	go func() {
-		lastBlock := s.state.GetLastBlock()
-		if lastBlock.Number+1 == block.Number {
-			s.cancelFunc(errors.ErrServerCancelMining)
-		}
 		s.blockQueue <- block
 		s.blockBroadcastQueue <- block
 	}()
-
-	log.Printf("broadcast the block: %x", request.Hash)
 
 	return &protocol.BlockReply{Result: true}, nil
 }
@@ -135,31 +136,43 @@ func (s *BitcoinServer) BroadcastBlock() {
 func (s *BitcoinServer) UpdateState() {
 	//TODO: how to handle when server is restart
 	for {
-		for i := uint64(0); i < s.cfg.BlocksPerDifficulty; i++ {
-			block := <-s.blockQueue
-
-			err := s.txService.ChainOnTxs(block.GetTxs()...)
-			if err != nil {
-				log.Printf("chain on transaction err: %v", err)
+		blocks := make([]*model.Block, 0, BlockQueueSize)
+		for {
+			block, ok := <-s.blockQueue
+			if ok {
+				blocks = append(blocks, block)
+			} else {
+				break
 			}
-			s.state.Update(block)
 		}
+		s.setLastBlocks(blocks)
 	}
 }
 
 func (s *BitcoinServer) PullBlocks() {
 	for addr := range s.pullBlockQueue {
 		for {
-			lastBlock := s.state.GetLastBlock() //TODO: should be not same each time if we saved any of blockReqs
+			//TODO: lastBlock should be not same each time if we saved any of blockReqs
+			//TODO: maybe stop the mining when pull blocks?
+			lastBlock := s.getLastBlock()
 			blockReqs, end, err := s.nodeService.GetBlocks(lastBlock.Number, lastBlock.Hash, addr)
 			if err != nil {
 				log.Printf("get blocks from %v error: %v", addr, err)
 				break
 			}
 
+			blocks := make([]*model.Block, 0, len(blockReqs))
 			var block *model.Block
 			for _, blockReq := range blockReqs {
 				block, err = s.validateBlock(blockReq)
+				if err == errors.ErrBlockExist {
+					// TODO: maybe we need set all last blocks in the pull blocks request
+
+					// it's possible that my main chain is not main chain anymore,
+					// so I pull all blocks of the new main chain, the new main chain is side chain previously,
+					// some blocks of the new main chain already exist, so ignore this error
+					continue
+				}
 				if err != nil {
 					break
 				}
@@ -169,10 +182,12 @@ func (s *BitcoinServer) PullBlocks() {
 					log.Fatalf("save block %x failed: %v", block.Hash, err)
 				}
 
-				go func() {
-					s.blockQueue <- block
-					s.blockBroadcastQueue <- block
-				}()
+				blocks = append(blocks, block)
+			}
+
+			for _, block := range blocks {
+				s.blockQueue <- block
+				s.blockBroadcastQueue <- block
 			}
 
 			if err != nil {
@@ -180,7 +195,7 @@ func (s *BitcoinServer) PullBlocks() {
 				break
 			}
 
-			if block != nil && block.Number == end {
+			if len(blocks) > 0 && blocks[len(blocks)-1].Number == end {
 				break
 			}
 		}
@@ -189,8 +204,8 @@ func (s *BitcoinServer) PullBlocks() {
 
 func (s *BitcoinServer) MineBlock(ctx context.Context) {
 	for {
-		lastBlock := s.state.GetLastBlock()
-		reward, difficulty := s.state.Get(s.cfg.BlocksPerDifficulty, s.cfg.BlocksPerRewrad, s.cfg.BlockInterval)
+		lastBlock := s.getLastBlock()
+		reward := lastBlock.GetNextReward(s.cfg.BlocksPerRewrad)
 
 		txs, err := s.receiveTxs(reward)
 		if err != nil {
@@ -199,10 +214,17 @@ func (s *BitcoinServer) MineBlock(ctx context.Context) {
 			continue
 		}
 
-		block, err := s.blockService.MineBlock(lastBlock, difficulty, txs, ctx)
+		block, err := s.blockService.MineBlock(lastBlock, txs, ctx)
 		if err != nil {
 			//TODO: maybe fatal err?
 			log.Printf("mine block error: %v", err)
+			continue
+		}
+
+		//TODO: save txs and block in one db transaction
+		err = s.txService.ChainOnTxs(block.GetTxs()...)
+		if err != nil {
+			log.Printf("chain on transaction err: %v", err)
 			continue
 		}
 
@@ -233,6 +255,13 @@ func (s *BitcoinServer) addBlock(blockReq *protocol.BlockReq) (*model.Block, err
 		return nil, err
 	}
 
+	//TODO: save txs and block in one db transaction
+	err = s.txService.ChainOnTxs(block.GetTxs()...)
+	if err != nil {
+		log.Printf("chain on transaction err: %v", err)
+		return nil, err
+	}
+
 	err = s.blockService.SaveBlock(block)
 	if err != nil {
 		log.Printf("save block %x failed: %v", block.Hash, err)
@@ -258,4 +287,28 @@ func (s *BitcoinServer) receiveTxs(reward uint64) ([]*model.Transaction, error) 
 
 	txs[0] = coinbaseTx
 	return txs, nil
+}
+
+func (s *BitcoinServer) getLastBlock() *model.Block {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.lastBlock
+}
+
+func (s *BitcoinServer) setLastBlocks(blocks []*model.Block) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	for _, block := range blocks {
+		if s.cfg.Server != block.Miner && bytes.Equal(s.lastBlock.Hash, block.Prevhash) {
+			s.cancelFunc(errors.ErrServerCancelMining)
+		}
+
+		delete(s.lastBlocks, string(block.Prevhash))
+		s.lastBlocks[string(block.Hash)] = block
+		if block.Number > s.lastBlock.Number {
+			s.lastBlock = block
+		}
+	}
 }

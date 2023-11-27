@@ -80,11 +80,13 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return err
 	}
 
+	//TODO: validate the txs of the block, must validate the prevtx existence of current block chain
+
 	return nil
 }
 
-func (serv *BlockService) MineBlock(lastBlock *model.Block, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
-	block, err := serv.MakeBlock(lastBlock, difficulty, transactions, ctx)
+func (serv *BlockService) MineBlock(lastBlock *model.Block, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
+	block, err := serv.MakeBlock(lastBlock, transactions, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -96,19 +98,25 @@ func (serv *BlockService) MineBlock(lastBlock *model.Block, difficulty float64, 
 	return block, nil
 }
 
-func (service *BlockService) MakeBlock(lastBlock *model.Block, difficulty float64, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
+func (service *BlockService) MakeBlock(lastBlock *model.Block, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
 	content, err := merkle.BuildTree(transactions)
 	if err != nil {
 		return nil, err
 	}
 
+	now := time.Now().UTC()
+	difficulty := lastBlock.GetNextDifficulty(service.cfg.BlocksPerDifficulty, service.cfg.BlockInterval)
+	totalInterval := lastBlock.GetNextTotalInterval(now, service.cfg.BlocksPerDifficulty)
+
 	block := &model.Block{
-		Number:     lastBlock.Number + 1,
-		Prevhash:   lastBlock.Hash,
-		RootHash:   content.Table[len(content.Table)-1][0].Hash,
-		Difficulty: difficulty,
-		Time:       time.Now().UTC(),
-		Body:       content,
+		Number:        lastBlock.Number + 1,
+		Prevhash:      lastBlock.Hash,
+		RootHash:      content.Table[len(content.Table)-1][0].Hash,
+		Difficulty:    difficulty,
+		Time:          now,
+		TotalInterval: totalInterval,
+		Miner:         service.cfg.Server,
+		Body:          content,
 	}
 
 	hash, err := block.FindHash(ctx)

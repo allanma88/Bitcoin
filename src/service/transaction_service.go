@@ -9,7 +9,7 @@ import (
 )
 
 type TransactionService struct {
-	utxo map[string]uint64
+	utxo map[string]uint64 //TODO: move to server
 	database.ITransactionDB
 }
 
