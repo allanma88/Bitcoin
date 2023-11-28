@@ -32,6 +32,7 @@ type Block struct {
 	Body          *merkle.MerkleTree[*Transaction]
 	TotalInterval uint64
 	Miner         string
+	PrevBlock     *Block
 }
 
 type prettyBlock struct {

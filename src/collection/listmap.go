@@ -1,5 +1,7 @@
 package collection
 
+//TODO: test cases
+
 type ListMap[K bool | int | string, T any] struct {
 	head  *listNode[K, T]
 	tail  *listNode[K, T]

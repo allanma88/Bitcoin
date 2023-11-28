@@ -1,6 +1,7 @@
 package server
 
 import (
+	"Bitcoin/src/collection"
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
@@ -9,6 +10,7 @@ import (
 	"Bitcoin/src/service"
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"sync"
 )
@@ -25,8 +27,7 @@ const (
 type BitcoinServer struct {
 	protocol.TransactionServer
 	protocol.BlockServer
-	lastBlock           *model.Block
-	lastBlocks          map[string]*model.Block
+	lastBlocks          *collection.SortedSet[*model.Block]
 	cfg                 *config.Config
 	nodeService         *service.NodeService
 	txService           *service.TransactionService
@@ -51,8 +52,7 @@ func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb 
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
 		mineQueue:           make(chan *model.Transaction, MaxTxSizePerBlock),
 		pullBlockQueue:      make(chan string, PullBlockQueueSize),
-		lastBlock:           nil, //TODO: how to set when server restart?
-		lastBlocks:          make(map[string]*model.Block),
+		lastBlocks:          collection.NewSortedSet[*model.Block](), //TODO: how to set when server restart?
 		cancelFunc:          cancelFunc,
 		lock:                sync.Mutex{},
 	}
@@ -117,8 +117,7 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 }
 
 func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
-
-	return nil, nil
+	return nil, fmt.Errorf("GetBlocks API not implemented")
 }
 
 func (s *BitcoinServer) BroadcastTx() {
@@ -154,8 +153,8 @@ func (s *BitcoinServer) PullBlocks() {
 		for {
 			//TODO: lastBlock should be not same each time if we saved any of blockReqs
 			//TODO: maybe stop the mining when pull blocks?
-			lastBlock := s.getLastBlock()
-			blockReqs, end, err := s.nodeService.GetBlocks(lastBlock.Number, lastBlock.Hash, addr)
+			lastBlockHashes := s.getLastBlockHashes(10)
+			blockReqs, end, err := s.nodeService.GetBlocks(lastBlockHashes, addr)
 			if err != nil {
 				log.Printf("get blocks from %v error: %v", addr, err)
 				break
@@ -166,8 +165,6 @@ func (s *BitcoinServer) PullBlocks() {
 			for _, blockReq := range blockReqs {
 				block, err = s.validateBlock(blockReq)
 				if err == errors.ErrBlockExist {
-					// TODO: maybe we need set all last blocks in the pull blocks request
-
 					// it's possible that my main chain is not main chain anymore,
 					// so I pull all blocks of the new main chain, the new main chain is side chain previously,
 					// some blocks of the new main chain already exist, so ignore this error
@@ -293,7 +290,19 @@ func (s *BitcoinServer) getLastBlock() *model.Block {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.lastBlock
+	return s.lastBlocks.First()
+}
+
+func (s *BitcoinServer) getLastBlockHashes(n int) [][]byte {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	blocks := s.lastBlocks.Top(n)
+	blockHashes := make([][]byte, len(blocks))
+	for i := 0; i < len(blocks); i++ {
+		blockHashes[i] = blocks[i].Hash
+	}
+	return blockHashes
 }
 
 func (s *BitcoinServer) setLastBlocks(blocks []*model.Block) {
@@ -301,14 +310,12 @@ func (s *BitcoinServer) setLastBlocks(blocks []*model.Block) {
 	defer s.lock.Unlock()
 
 	for _, block := range blocks {
-		if s.cfg.Server != block.Miner && bytes.Equal(s.lastBlock.Hash, block.Prevhash) {
+		lastBlock := s.lastBlocks.First()
+		if s.cfg.Server != block.Miner && bytes.Equal(lastBlock.Hash, block.Prevhash) {
 			s.cancelFunc(errors.ErrServerCancelMining)
 		}
 
-		delete(s.lastBlocks, string(block.Prevhash))
-		s.lastBlocks[string(block.Hash)] = block
-		if block.Number > s.lastBlock.Number {
-			s.lastBlock = block
-		}
+		s.lastBlocks.Remove(block.PrevBlock)
+		s.lastBlocks.Insert(block)
 	}
 }

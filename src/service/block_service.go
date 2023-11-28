@@ -69,6 +69,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 	if block.Number != prevBlock.Number+1 {
 		return errors.ErrBlockNumberInvalid
 	}
+	block.PrevBlock = prevBlock
 
 	err = validateDifficulty(block.Hash, block.Difficulty)
 	if err != nil {

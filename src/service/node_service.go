@@ -95,10 +95,9 @@ func (service *NodeService) SendBlock(block *model.Block) {
 }
 
 // TODO: test cases
-func (service *NodeService) GetBlocks(blockNumber uint64, blockHash []byte, addr string) ([]*protocol.BlockReq, uint64, error) {
+func (service *NodeService) GetBlocks(blockHashes [][]byte, addr string) ([]*protocol.BlockReq, uint64, error) {
 	req := &protocol.GetBlocksReq{
-		Blocknumber: blockNumber,
-		Blockhash:   blockHash,
+		Blockhashes: blockHashes,
 	}
 	node := service.nodes.Get(addr)
 	reply, err := node.Client.GetBlocks(req)
