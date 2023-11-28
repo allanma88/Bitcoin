@@ -18,7 +18,7 @@ func Test_ChainOnTxs_Not_On_Chain(t *testing.T) {
 	formalizeTx(tx)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	err := service.ChainOnTxs(tx)
 	if !errors.Is(bcerrors.ErrTxNotOnChain, err) {
 		t.Fatalf("on chain tx failed, expect: %v, actual %v", bcerrors.ErrTxNotOnChain, err)
@@ -29,7 +29,7 @@ func Test_ChainOnTxs_No_PrevTx(t *testing.T) {
 	_, tx := newTransactionPair(10, 8, time.Minute, nil, nil)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	err := service.ChainOnTxs(tx)
 	if !errors.Is(bcerrors.ErrPrevTxNotFound, err) {
 		t.Fatalf("on chain tx failed, expect: %v, actual %v", bcerrors.ErrPrevTxNotFound, err)
@@ -40,7 +40,7 @@ func Test_ChainOnTxs_PrevOut_Not_In_UXTO(t *testing.T) {
 	prevTx, tx := newTransactionPair(10, 8, time.Minute, nil, nil)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	err := service.SaveOnChainTx(prevTx)
 	if err != nil {
 		t.Fatalf("save prev tx error: %v", err)
@@ -57,19 +57,19 @@ func Test_ChainOnTxs_OK(t *testing.T) {
 	prevTx, tx := newTransactionPair(txVal+8, txVal, time.Minute, nil, nil)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 
 	err := service.ChainOnTxs(prevTx, tx)
 	if err != nil {
 		t.Fatalf("put prevtx and tx on chain error: %v", err)
 	}
 
-	_, ok := service.GetBalance(prevTx.Outs[0].Pubkey)
-	if ok {
+	prevVal := service.GetBalance(prevTx.Outs[0].Pubkey)
+	if prevVal > 0 {
 		t.Fatalf("account %x of prev tx didn't remove from utxo", prevTx.Outs[0].Pubkey[:10])
 	}
 
-	val, _ := service.GetBalance(tx.Outs[0].Pubkey)
+	val := service.GetBalance(tx.Outs[0].Pubkey)
 	if val != txVal {
 		t.Fatalf("balance of account %x should be %d, acutally is %d", tx.Outs[0].Pubkey, txVal, val)
 	}

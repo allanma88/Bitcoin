@@ -63,7 +63,7 @@ func Test_Validate_Time_Too_Early(t *testing.T) {
 	formalizeTx(tx)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	_, err := service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrIdentityTooEarly) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrIdentityTooEarly, err)
@@ -79,7 +79,7 @@ func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 	formalizeTx(tx)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	_, err := service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrInLenMismatch) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrInLenMismatch, err)
@@ -103,7 +103,7 @@ func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
 	formalizeTx(tx)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	_, err = service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrPrevTxNotFound) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
@@ -207,7 +207,7 @@ func Test_Validate_Outs_Len_Not_Match(t *testing.T) {
 	formalizeTx(tx)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	_, err := service.Validate(tx)
 	if !errors.Is(err, bcerrors.ErrOutLenMismatch) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrOutLenMismatch, err)
@@ -277,7 +277,7 @@ func Test_Validate_Hash_Not_Change(t *testing.T) {
 	originalHash := tx.Hash
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	_, err := service.Validate(tx)
 	if err != nil {
 		t.Fatalf("validate transaction error: %s", err)
@@ -378,7 +378,7 @@ func newTransactionDB(txs ...*model.Transaction) database.ITransactionDB {
 }
 
 func newTransactionService(txdb database.ITransactionDB, txs ...*model.Transaction) *service.TransactionService {
-	service := service.NewTransactionService(txdb)
+	service := service.NewTransactionService(txdb, service.NewUtxoService())
 	err := service.ChainOnTxs(txs...)
 	if err != nil {
 		log.Fatalf("put txs on chain error: %v", err)

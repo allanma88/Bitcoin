@@ -32,6 +32,7 @@ type BitcoinServer struct {
 	nodeService         *service.NodeService
 	txService           *service.TransactionService
 	blockService        *service.BlockService
+	utxoService         *service.UtxoService
 	txBroadcastQueue    chan *model.Transaction
 	blockQueue          chan *model.Block
 	blockBroadcastQueue chan *model.Block
@@ -42,10 +43,12 @@ type BitcoinServer struct {
 }
 
 func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
+	utxoService := service.NewUtxoService()
 	server := &BitcoinServer{
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg),
-		txService:           service.NewTransactionService(txdb),
+		utxoService:         utxoService,
+		txService:           service.NewTransactionService(txdb, utxoService),
 		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
 		blockQueue:          make(chan *model.Block, BlockQueueSize),

@@ -5,18 +5,17 @@ import (
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
-	"log"
 )
 
 type TransactionService struct {
-	utxo map[string]uint64 //TODO: move to server
+	utxo *UtxoService
 	database.ITransactionDB
 }
 
-func NewTransactionService(db database.ITransactionDB) *TransactionService {
+func NewTransactionService(db database.ITransactionDB, utxo *UtxoService) *TransactionService {
 	service := &TransactionService{
 		ITransactionDB: db,
-		utxo:           make(map[string]uint64),
+		utxo:           utxo,
 	}
 	return service
 }
@@ -74,21 +73,11 @@ func (service *TransactionService) ChainOnTxs(txs ...*model.Transaction) error {
 				return errors.ErrPrevTxNotFound
 			}
 
-			out := prevTx.Outs[in.Index]
-			if service.utxo[string(out.Pubkey)] < out.Value {
-				return errors.ErrAccountNotEnoughValues
-			}
-
-			service.utxo[string(out.Pubkey)] -= out.Value
-			if service.utxo[string(out.Pubkey)] == 0 {
-				log.Printf("remove %x from uxto", out.Pubkey[:10])
-				delete(service.utxo, string(out.Pubkey))
-			}
+			service.utxo.ReduceBalance(prevTx.Outs[in.Index])
 		}
 
 		for _, out := range tx.Outs {
-			log.Printf("add %x to uxto", out.Pubkey[:10])
-			service.utxo[string(out.Pubkey)] += out.Value
+			service.utxo.AddBalance(out)
 		}
 
 		err := service.ITransactionDB.SaveOnChainTx(tx)
@@ -100,9 +89,8 @@ func (service *TransactionService) ChainOnTxs(txs ...*model.Transaction) error {
 	return nil
 }
 
-func (service *TransactionService) GetBalance(pubkey []byte) (uint64, bool) {
-	val, ok := service.utxo[string(pubkey)]
-	return val, ok
+func (service *TransactionService) GetBalance(pubkey []byte) uint64 {
+	return service.utxo.GetBalance(pubkey)
 }
 
 func (service *TransactionService) validateInputs(tx *model.Transaction) (uint64, error) {
@@ -136,7 +124,7 @@ func (service *TransactionService) validateInput(input *model.In, tx *model.Tran
 	}
 
 	prevOutput := prevTx.Outs[input.Index]
-	if service.utxo[string(prevOutput.Pubkey)] < prevOutput.Value {
+	if service.utxo.GetBalance(prevOutput.Pubkey) < prevOutput.Value {
 		return 0, errors.ErrAccountNotEnoughValues
 	}
 
