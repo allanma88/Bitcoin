@@ -1,18 +1,15 @@
 package server
 
 import (
-	"Bitcoin/src/collection"
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"Bitcoin/src/service"
-	"bytes"
 	"context"
 	"fmt"
 	"log"
-	"sync"
 )
 
 const (
@@ -27,19 +24,18 @@ const (
 type BitcoinServer struct {
 	protocol.TransactionServer
 	protocol.BlockServer
-	lastBlocks          *collection.SortedSet[*model.Block]
 	cfg                 *config.Config
 	nodeService         *service.NodeService
+	utxoService         *service.UtxoService
+	chainService        *service.ChainService
 	txService           *service.TransactionService
 	blockService        *service.BlockService
-	utxoService         *service.UtxoService
 	txBroadcastQueue    chan *model.Transaction
 	blockQueue          chan *model.Block
 	blockBroadcastQueue chan *model.Block
 	mineQueue           chan *model.Transaction
 	pullBlockQueue      chan string
 	cancelFunc          context.CancelCauseFunc
-	lock                sync.Mutex
 }
 
 func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
@@ -48,6 +44,7 @@ func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb 
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg),
 		utxoService:         utxoService,
+		chainService:        service.NewChainService(), //TODO: how to set when server restart?
 		txService:           service.NewTransactionService(txdb, utxoService),
 		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
@@ -55,9 +52,7 @@ func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb 
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
 		mineQueue:           make(chan *model.Transaction, MaxTxSizePerBlock),
 		pullBlockQueue:      make(chan string, PullBlockQueueSize),
-		lastBlocks:          collection.NewSortedSet[*model.Block](), //TODO: how to set when server restart?
 		cancelFunc:          cancelFunc,
-		lock:                sync.Mutex{},
 	}
 	return server, nil
 }
@@ -139,7 +134,10 @@ func (s *BitcoinServer) UpdateState() {
 	//TODO: how to handle when server is restart
 	for {
 		block := <-s.blockQueue
-		s.setLastBlock(block)
+		isMainChain := s.chainService.SetChain(block)
+		if s.cfg.Server != block.Miner && isMainChain {
+			s.cancelFunc(errors.ErrServerCancelMining)
+		}
 	}
 }
 
@@ -148,7 +146,7 @@ func (s *BitcoinServer) PullBlocks() {
 		for {
 			//TODO: lastBlock should be not same each time if we saved any of blockReqs
 			//TODO: maybe stop the mining when pull blocks?
-			lastBlockHashes := s.getLastBlockHashes(10)
+			lastBlockHashes := s.chainService.GetChainHashes(10)
 			blockReqs, end, err := s.nodeService.GetBlocks(lastBlockHashes, addr)
 			if err != nil {
 				log.Printf("get blocks from %v error: %v", addr, err)
@@ -202,7 +200,7 @@ func (s *BitcoinServer) PullBlocks() {
 
 func (s *BitcoinServer) MineBlock(ctx context.Context) {
 	for {
-		lastBlock := s.getLastBlock()
+		lastBlock := s.chainService.GetMainChain()
 		reward := lastBlock.GetNextReward(s.cfg.BlocksPerRewrad)
 
 		txs, err := s.receiveTxs(reward)
@@ -297,35 +295,4 @@ func (s *BitcoinServer) receiveTxs(reward uint64) ([]*model.Transaction, error) 
 
 	txs[0] = coinbaseTx
 	return txs, nil
-}
-
-func (s *BitcoinServer) getLastBlock() *model.Block {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	return s.lastBlocks.First()
-}
-
-func (s *BitcoinServer) getLastBlockHashes(n int) [][]byte {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	blocks := s.lastBlocks.Top(n)
-	blockHashes := make([][]byte, len(blocks))
-	for i := 0; i < len(blocks); i++ {
-		blockHashes[i] = blocks[i].Hash
-	}
-	return blockHashes
-}
-
-func (s *BitcoinServer) setLastBlock(block *model.Block) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	lastBlock := s.lastBlocks.First()
-	if s.cfg.Server != block.Miner && bytes.Equal(lastBlock.Hash, block.Prevhash) {
-		s.cancelFunc(errors.ErrServerCancelMining)
-	}
-	s.lastBlocks.Remove(block.PrevBlock)
-	s.lastBlocks.Insert(block)
 }
