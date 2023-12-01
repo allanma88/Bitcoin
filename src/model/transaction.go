@@ -12,6 +12,7 @@ import (
 )
 
 type In struct {
+	//TODO: add PrevTx property?
 	PrevHash  []byte `json:"prevHash,omitempty"`
 	Index     uint32 `json:"index,omitempty"`
 	Signature []byte `json:"signature,omitempty"`
@@ -98,7 +99,6 @@ type Transaction struct {
 	OutLen    uint32    `json:"out_len,omitempty"`
 	Ins       []*In     `json:"ins,omitempty"`
 	Outs      []*Out    `json:"outs,omitempty"`
-	Fee       uint64    `json:"-,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitempty"`
 	BlockHash []byte    `json:"block_hash,omitempty"`
 }

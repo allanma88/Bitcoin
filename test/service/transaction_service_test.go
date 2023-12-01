@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Bitcoin/src/cryptography"
 	bcerrors "Bitcoin/src/errors"
 	"Bitcoin/src/model"
 	"Bitcoin/src/service"
@@ -37,11 +38,16 @@ func Test_ChainOnTxs_No_PrevTx(t *testing.T) {
 }
 
 func Test_ChainOnTxs_PrevOut_Not_In_UXTO(t *testing.T) {
-	prevTx, tx := newTransactionPair(10, 8, time.Minute, nil, nil)
+	blockHash, err := cryptography.Hash("block")
+	if err != nil {
+		t.Fatalf("compute block hash error: %v", err)
+	}
+
+	prevTx, tx := newTransactionPair(10, 8, time.Minute, blockHash, blockHash)
 
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb, service.NewUtxoService())
-	err := service.SaveOnChainTx(prevTx)
+	err = service.SaveOnChainTx(prevTx)
 	if err != nil {
 		t.Fatalf("save prev tx error: %v", err)
 	}

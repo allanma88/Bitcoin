@@ -67,13 +67,12 @@ func (s *BitcoinServer) AddTx(ctx context.Context, request *protocol.Transaction
 
 	log.Printf("received transaction: %x", tx.Hash)
 
-	fee, err := s.txService.Validate(tx)
+	_, err := s.txService.ValidateOffChainTx(tx)
 	if err != nil {
 		log.Printf("validate transaction %x failed: %v", tx.Hash, err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
 	log.Printf("validated transaction: %x", tx.Hash)
-	tx.Fee = fee
 
 	err = s.txService.SaveOffChainTx(tx)
 	if err != nil {
@@ -120,6 +119,7 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 }
 
 func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
+	//TODO: return blocks of the main chain of the current node
 	return nil, fmt.Errorf("GetBlocks API not implemented")
 }
 
@@ -138,16 +138,8 @@ func (s *BitcoinServer) BroadcastBlock() {
 func (s *BitcoinServer) UpdateState() {
 	//TODO: how to handle when server is restart
 	for {
-		blocks := make([]*model.Block, 0, BlockQueueSize)
-		for {
-			block, ok := <-s.blockQueue
-			if ok {
-				blocks = append(blocks, block)
-			} else {
-				break
-			}
-		}
-		s.setLastBlocks(blocks)
+		block := <-s.blockQueue
+		s.setLastBlock(block)
 	}
 }
 
@@ -186,8 +178,14 @@ func (s *BitcoinServer) PullBlocks() {
 			}
 
 			for _, block := range blocks {
-				s.blockQueue <- block
 				s.blockBroadcastQueue <- block
+			}
+
+			if len(blocks) > 0 {
+				s.blockQueue <- blocks[0]
+			}
+			if len(blocks) > 1 {
+				s.blockQueue <- blocks[len(blocks)-1]
 			}
 
 			if err != nil {
@@ -244,6 +242,14 @@ func (s *BitcoinServer) validateBlock(blockReq *protocol.BlockReq) (*model.Block
 	if err != nil {
 		return nil, err
 	}
+
+	reward := block.GetNextReward(s.cfg.BlocksPerRewrad)
+	txs := block.Body.GetVals()
+	s.txService.ValidateOnChainTxs(txs, block.Hash, reward)
+	if err != nil {
+		return nil, err
+	}
+
 	log.Printf("validated block: %x", block.Hash)
 	return block, nil
 }
@@ -277,7 +283,11 @@ func (s *BitcoinServer) receiveTxs(reward uint64) ([]*model.Transaction, error) 
 	var totalFee uint64 = 0
 	for i := 1; i < MaxTxSizePerBlock; i++ {
 		txs[i] = <-s.mineQueue //TODO: need to validate the tx again since tx maybe invalid when we start to mine the block
-		totalFee += txs[i].Fee
+		fee, err := s.txService.ValidateOffChainTx(txs[i])
+		if err != nil {
+			return nil, err
+		}
+		totalFee += fee
 	}
 
 	coinbaseTx, err := model.MakeCoinbaseTx(s.cfg.MinerPubkey, reward+totalFee)
@@ -308,17 +318,14 @@ func (s *BitcoinServer) getLastBlockHashes(n int) [][]byte {
 	return blockHashes
 }
 
-func (s *BitcoinServer) setLastBlocks(blocks []*model.Block) {
+func (s *BitcoinServer) setLastBlock(block *model.Block) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	for _, block := range blocks {
-		lastBlock := s.lastBlocks.First()
-		if s.cfg.Server != block.Miner && bytes.Equal(lastBlock.Hash, block.Prevhash) {
-			s.cancelFunc(errors.ErrServerCancelMining)
-		}
-
-		s.lastBlocks.Remove(block.PrevBlock)
-		s.lastBlocks.Insert(block)
+	lastBlock := s.lastBlocks.First()
+	if s.cfg.Server != block.Miner && bytes.Equal(lastBlock.Hash, block.Prevhash) {
+		s.cancelFunc(errors.ErrServerCancelMining)
 	}
+	s.lastBlocks.Remove(block.PrevBlock)
+	s.lastBlocks.Insert(block)
 }

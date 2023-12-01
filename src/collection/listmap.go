@@ -22,16 +22,28 @@ func NewListMap[K bool | int | string, T any]() *ListMap[K, T] {
 	return list
 }
 
-func (list *ListMap[K, T]) First() K {
-	return list.head.Key
+func (list *ListMap[K, T]) FirstKey() K {
+	if list.head != nil {
+		return list.head.Key
+	}
+	return *new(K)
 }
 
-func (list *ListMap[K, T]) Next(key K) K {
-	return list.nodes[key].Next.Key
+func (list *ListMap[K, T]) NextKey(key K) K {
+	if node, ok := list.nodes[key]; ok {
+		if node.Next != nil {
+			return node.Next.Key
+		}
+	}
+	return *new(K)
 }
 
 func (list *ListMap[K, T]) Get(key K) T {
-	return list.nodes[key].Val
+	if node, ok := list.nodes[key]; ok {
+		return node.Val
+	} else {
+		return *new(T)
+	}
 }
 
 func (list *ListMap[K, T]) Len() int {

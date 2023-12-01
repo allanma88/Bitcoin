@@ -13,6 +13,7 @@ type UtxoService struct {
 func NewUtxoService() *UtxoService {
 	return &UtxoService{utxo: make(map[string]uint64)}
 }
+
 func (service *UtxoService) GetBalance(pubkey []byte) uint64 {
 	val := service.utxo[string(pubkey)]
 	return val

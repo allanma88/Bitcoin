@@ -11,10 +11,13 @@ import (
 )
 
 func Test_Validate_Succeed(t *testing.T) {
-	block := test.NewBlock(1, 10)
+	prevBlock := test.NewBlock(1, 10, nil)
+	block := test.NewBlock(2, 10, prevBlock.Hash)
 	blockdb := newBlockDB()
 	blockContentDB := newBlockContentDB()
 	serv := service.NewBlockService(blockdb, blockContentDB, &config.Config{})
+
+	blockdb.SaveBlock(prevBlock)
 
 	err := serv.Validate(block)
 	if err != nil {

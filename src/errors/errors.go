@@ -11,6 +11,8 @@ var (
 	ErrTxNotOnChain           = errors.New("transaction not on chain")
 	ErrPrevTxNotFound         = errors.New("prev transaction not found")
 	ErrTxNotEnoughValues      = errors.New("transaction not enough values")
+	ErrTxBlockHashInvalid     = errors.New("transaction block hash invalid")
+	ErrTxCoinbaseInvalid      = errors.New("coinbase transaction invalid")
 	ErrInLenMismatch          = errors.New("transaction input length mismatch")
 	ErrInLenOutOfIndex        = errors.New("transaction input out of index of prev transaction outputs")
 	ErrInTooLate              = errors.New("transaction input is later than prev transaction")

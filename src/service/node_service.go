@@ -118,7 +118,7 @@ func broadcastReq[Q, R any](service *NodeService, req Q, send sendFunc[Q, R]) {
 	deleted := make([]string, 0, service.nodes.Len())
 	wg := &sync.WaitGroup{}
 
-	key := service.nodes.First()
+	key := service.nodes.FirstKey()
 	for i := 0; i < service.nodes.Len(); i++ {
 		node := service.nodes.Get(key)
 		wg.Add(1)
@@ -130,7 +130,7 @@ func broadcastReq[Q, R any](service *NodeService, req Q, send sendFunc[Q, R]) {
 			}
 			wg.Done()
 		}(node)
-		key = service.nodes.Next(key)
+		key = service.nodes.NextKey(key)
 	}
 	wg.Wait()
 
