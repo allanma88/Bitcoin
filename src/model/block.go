@@ -22,8 +22,8 @@ const (
 )
 
 type Block struct {
-	Number        uint64
 	Hash          []byte
+	Number        uint64
 	Prevhash      []byte
 	RootHash      []byte
 	Nonce         uint32
@@ -35,7 +35,7 @@ type Block struct {
 	PrevBlock     *Block
 }
 
-type prettyBlock struct {
+type jBlock struct {
 	Number        uint64    `json:"number,omitempty"`
 	Hash          string    `json:"hash,omitempty"`
 	Prevhash      string    `json:"prevhash,omitempty"`
@@ -48,7 +48,7 @@ type prettyBlock struct {
 }
 
 func (block *Block) MarshalJSON() ([]byte, error) {
-	var s = prettyBlock{
+	var jblock = jBlock{
 		Number:        block.Number,
 		Hash:          hex.EncodeToString(block.Hash),
 		Prevhash:      hex.EncodeToString(block.Prevhash),
@@ -59,11 +59,11 @@ func (block *Block) MarshalJSON() ([]byte, error) {
 		TotalInterval: block.TotalInterval,
 		Miner:         block.Miner,
 	}
-	return json.Marshal(s)
+	return json.Marshal(jblock)
 }
 
 func (block *Block) UnmarshalJSON(data []byte) error {
-	var s prettyBlock
+	var s jBlock
 	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
@@ -155,13 +155,17 @@ func (block *Block) FindHash(ctx context.Context) ([]byte, error) {
 }
 
 func (block *Block) ComputeHash() ([]byte, error) {
-	originalHash := block.Hash
-	block.Hash = []byte{}
+	//TODO: more general way to compute hash, use tag and no need assign the value of each field
+	newblock := &Block{
+		Number:     block.Number,
+		Prevhash:   block.Prevhash,
+		RootHash:   block.RootHash,
+		Nonce:      block.Nonce,
+		Difficulty: block.Difficulty,
+		Time:       block.Time,
+	}
 
-	hash, err := cryptography.Hash(block)
-
-	block.Hash = originalHash
-	return hash, err
+	return cryptography.Hash(newblock)
 }
 
 func (block *Block) GetTxs() []*Transaction {

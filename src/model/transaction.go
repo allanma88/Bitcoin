@@ -12,7 +12,6 @@ import (
 )
 
 type In struct {
-	//TODO: add PrevTx property?
 	PrevHash  []byte
 	PrevOut   *Out
 	Index     uint32
@@ -95,25 +94,27 @@ func (out *Out) UnmarshalJSON(data []byte) error {
 }
 
 type Transaction struct {
-	Hash      []byte    `json:"hash,omitempty"`
+	Hash      []byte
+	InLen     uint32
+	OutLen    uint32
+	Ins       []*In
+	Outs      []*Out
+	Timestamp time.Time
+	BlockHash []byte
+}
+
+type jTransaction struct {
+	Hash      string    `json:"hash,omitempty"`
 	InLen     uint32    `json:"in_len,omitempty"`
 	OutLen    uint32    `json:"out_len,omitempty"`
 	Ins       []*In     `json:"ins,omitempty"`
 	Outs      []*Out    `json:"outs,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitempty"`
-	BlockHash []byte    `json:"block_hash,omitempty"`
+	BlockHash string    `json:"block_hash,omitempty"`
 }
 
 func (tx *Transaction) MarshalJSON() ([]byte, error) {
-	var s = struct {
-		Hash      string    `json:"hash,omitempty"`
-		InLen     uint32    `json:"in_len,omitempty"`
-		OutLen    uint32    `json:"out_len,omitempty"`
-		Ins       []*In     `json:"ins,omitempty"`
-		Outs      []*Out    `json:"outs,omitempty"`
-		Timestamp time.Time `json:"timestamp,omitempty"`
-		BlockHash string    `json:"block_hash,omitempty"`
-	}{
+	var jtx = jTransaction{
 		Hash:      hex.EncodeToString(tx.Hash),
 		InLen:     tx.InLen,
 		OutLen:    tx.OutLen,
@@ -122,40 +123,32 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		Timestamp: tx.Timestamp,
 		BlockHash: hex.EncodeToString(tx.BlockHash),
 	}
-	return json.Marshal(s)
+	return json.Marshal(jtx)
 }
 
 func (tx *Transaction) UnmarshalJSON(data []byte) error {
-	var s struct {
-		Hash      string    `json:"hash,omitempty"`
-		InLen     uint32    `json:"in_len,omitempty"`
-		OutLen    uint32    `json:"out_len,omitempty"`
-		Ins       []*In     `json:"ins,omitempty"`
-		Outs      []*Out    `json:"outs,omitempty"`
-		Timestamp time.Time `json:"timestamp,omitempty"`
-		BlockHash string    `json:"block_hash,omitempty"`
-	}
+	var jtx jTransaction
 
-	err := json.Unmarshal(data, &s)
+	err := json.Unmarshal(data, &jtx)
 	if err != nil {
 		return err
 	}
 
-	tx.Hash, err = hex.DecodeString(s.Hash)
+	tx.Hash, err = hex.DecodeString(jtx.Hash)
 	if err != nil {
 		return err
 	}
 
-	tx.BlockHash, err = hex.DecodeString(s.BlockHash)
+	tx.BlockHash, err = hex.DecodeString(jtx.BlockHash)
 	if err != nil {
 		return err
 	}
 
-	tx.InLen = s.InLen
-	tx.OutLen = s.OutLen
-	tx.Ins = s.Ins
-	tx.Outs = s.Outs
-	tx.Timestamp = s.Timestamp
+	tx.InLen = jtx.InLen
+	tx.OutLen = jtx.OutLen
+	tx.Ins = jtx.Ins
+	tx.Outs = jtx.Outs
+	tx.Timestamp = jtx.Timestamp
 	return err
 }
 
@@ -176,15 +169,26 @@ func TransactionTo(tx *Transaction) *protocol.TransactionReq {
 }
 
 func (tx *Transaction) ComputeHash() ([]byte, error) {
-	originalHash, originalBlockHash := tx.Hash, tx.BlockHash
-	tx.Hash = []byte{}
-	tx.BlockHash = []byte{}
+	//TODO: more general way to compute hash, use tag and no need assign the value of each field
+	ins := make([]*In, len(tx.Ins))
+	for i := 0; i < len(tx.Ins); i++ {
+		in := tx.Ins[i]
+		ins[i] = &In{
+			PrevHash:  in.PrevHash,
+			Index:     in.Index,
+			Signature: in.Signature,
+		}
+	}
 
-	hash, err := cryptography.Hash(tx)
+	newtx := &Transaction{
+		InLen:     tx.InLen,
+		OutLen:    tx.OutLen,
+		Ins:       ins,
+		Outs:      tx.Outs,
+		Timestamp: tx.Timestamp,
+	}
 
-	tx.Hash = originalHash
-	tx.BlockHash = originalBlockHash
-	return hash, err
+	return cryptography.Hash(newtx)
 }
 
 func MakeCoinbaseTx(pubkey []byte, val uint64) (*Transaction, error) {
