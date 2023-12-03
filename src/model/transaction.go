@@ -13,9 +13,10 @@ import (
 
 type In struct {
 	//TODO: add PrevTx property?
-	PrevHash  []byte `json:"prevHash,omitempty"`
-	Index     uint32 `json:"index,omitempty"`
-	Signature []byte `json:"signature,omitempty"`
+	PrevHash  []byte
+	PrevOut   *Out
+	Index     uint32
+	Signature []byte
 }
 
 func (in *In) MarshalJSON() ([]byte, error) {
@@ -175,12 +176,14 @@ func TransactionTo(tx *Transaction) *protocol.TransactionReq {
 }
 
 func (tx *Transaction) ComputeHash() ([]byte, error) {
-	originalHash := tx.Hash
+	originalHash, originalBlockHash := tx.Hash, tx.BlockHash
 	tx.Hash = []byte{}
+	tx.BlockHash = []byte{}
 
 	hash, err := cryptography.Hash(tx)
 
 	tx.Hash = originalHash
+	tx.BlockHash = originalBlockHash
 	return hash, err
 }
 

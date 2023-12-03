@@ -42,43 +42,16 @@ func (service *TransactionService) ValidateOffChainTx(tx *model.Transaction) (ui
 	return service.validate(tx, nil, false)
 }
 
-func (service *TransactionService) ChainOnTxs(txs ...*model.Transaction) error {
-	for _, tx := range txs {
-		if tx.BlockHash == nil || len(tx.BlockHash) == 0 {
-			return errors.ErrTxNotOnChain
-		}
-
-		for _, in := range tx.Ins {
-			prevTx, err := service.GetOnChainTx(in.PrevHash)
-			if err != nil {
-				return err
-			}
-			if prevTx == nil {
-				return errors.ErrPrevTxNotFound
-			}
-
-			err = service.utxo.ReduceBalance(prevTx.Outs[in.Index])
-			if err != nil {
-				return err
-			}
-		}
-
-		for _, out := range tx.Outs {
-			service.utxo.AddBalance(out)
-		}
-
-		err := service.ITransactionDB.SaveOnChainTx(tx)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (service *TransactionService) GetBalance(pubkey []byte) uint64 {
-	return service.utxo.GetBalance(pubkey)
-}
+// func (service *TransactionService) ChainOnTxs(txs ...*model.Transaction) error {
+// 	for _, tx := range txs {
+// 		err := service.ITransactionDB.SaveOnChainTx(tx)
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
+//
+// 	return nil
+// }
 
 func (service *TransactionService) validateCoinbase(tx *model.Transaction, blockhash []byte, val uint64) error {
 	if _, err := service.validate(tx, blockhash, true); err != nil {

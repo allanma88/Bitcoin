@@ -81,10 +81,10 @@ func NewTransaction(blockHash []byte) *model.Transaction {
 }
 
 func NewBlock(number uint64, difficultyLevel uint64, prevhash []byte) *model.Block {
-
 	txs := make([]*model.Transaction, 4)
 	for i := 0; i < len(txs); i++ {
-		txs[i] = NewTransaction(nil)
+		//TODO: prev tx hash
+		txs[i] = NewTransaction([]byte{})
 	}
 
 	tree, err := merkle.BuildTree(txs)
@@ -115,6 +115,9 @@ func NewBlock(number uint64, difficultyLevel uint64, prevhash []byte) *model.Blo
 		log.Fatalf("find block hash error: %s", err)
 	}
 	block.Hash = hash
+	for _, tx := range txs {
+		tx.BlockHash = hash
+	}
 
 	return block
 }

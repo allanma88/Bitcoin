@@ -134,9 +134,18 @@ func (s *BitcoinServer) UpdateState() {
 	//TODO: how to handle when server is restart
 	for {
 		block := <-s.blockQueue
-		isMainChain := s.chainService.SetChain(block)
-		if s.cfg.Server != block.Miner && isMainChain {
-			s.cancelFunc(errors.ErrServerCancelMining)
+		switchChain := s.chainService.SetChain(block)
+
+		if switchChain {
+			//TODO: rollback the uxto of prev main chain and execute the uxto of new main chain
+			//TODO: maybe rollback the tx of prev main chain and execute the tx of new main chain
+		} else {
+			if s.cfg.Server != block.Miner {
+				s.cancelFunc(errors.ErrServerCancelMining)
+			}
+
+			txs := block.GetTxs()
+			s.utxoService.UpdateBalances(txs)
 		}
 	}
 }
@@ -156,7 +165,7 @@ func (s *BitcoinServer) PullBlocks() {
 			blocks := make([]*model.Block, 0, len(blockReqs))
 			var block *model.Block
 			for _, blockReq := range blockReqs {
-				block, err = s.validateBlock(blockReq)
+				block, err = s.addBlock(blockReq)
 				if err == errors.ErrBlockExist {
 					// it's possible that my main chain is not main chain anymore,
 					// so I pull all blocks of the new main chain, the new main chain is side chain previously,
@@ -165,11 +174,6 @@ func (s *BitcoinServer) PullBlocks() {
 				}
 				if err != nil {
 					break
-				}
-
-				err = s.blockService.SaveBlock(block)
-				if err != nil {
-					log.Fatalf("save block %x failed: %v", block.Hash, err)
 				}
 
 				blocks = append(blocks, block)
@@ -217,19 +221,12 @@ func (s *BitcoinServer) MineBlock(ctx context.Context) {
 			continue
 		}
 
-		//TODO: save txs and block in one db transaction
-		err = s.txService.ChainOnTxs(block.GetTxs()...)
-		if err != nil {
-			log.Printf("chain on transaction err: %v", err)
-			continue
-		}
-
 		s.blockQueue <- block
 		s.blockBroadcastQueue <- block
 	}
 }
 
-func (s *BitcoinServer) validateBlock(blockReq *protocol.BlockReq) (*model.Block, error) {
+func (s *BitcoinServer) addBlock(blockReq *protocol.BlockReq) (*model.Block, error) {
 	block, err := model.BlockFrom(blockReq)
 	if err != nil {
 		return nil, err
@@ -240,29 +237,14 @@ func (s *BitcoinServer) validateBlock(blockReq *protocol.BlockReq) (*model.Block
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("validated block: %x", block.Hash)
+
+	//TODO: must validate the prevtx existence of current block chain
 
 	reward := block.GetNextReward(s.cfg.BlocksPerRewrad)
-	txs := block.Body.GetVals()
-	s.txService.ValidateOnChainTxs(txs, block.Hash, reward)
+	txs := block.GetTxs()
+	err = s.txService.ValidateOnChainTxs(txs, block.Hash, reward)
 	if err != nil {
-		return nil, err
-	}
-
-	log.Printf("validated block: %x", block.Hash)
-	return block, nil
-}
-
-func (s *BitcoinServer) addBlock(blockReq *protocol.BlockReq) (*model.Block, error) {
-	block, err := s.validateBlock(blockReq)
-	if err != nil {
-		log.Printf("validate block %x failed: %v", block.Hash, err)
-		return nil, err
-	}
-
-	//TODO: save txs and block in one db transaction
-	err = s.txService.ChainOnTxs(block.GetTxs()...)
-	if err != nil {
-		log.Printf("chain on transaction err: %v", err)
 		return nil, err
 	}
 
@@ -280,7 +262,7 @@ func (s *BitcoinServer) receiveTxs(reward uint64) ([]*model.Transaction, error) 
 	txs := make([]*model.Transaction, MaxTxSizePerBlock)
 	var totalFee uint64 = 0
 	for i := 1; i < MaxTxSizePerBlock; i++ {
-		txs[i] = <-s.mineQueue //TODO: need to validate the tx again since tx maybe invalid when we start to mine the block
+		txs[i] = <-s.mineQueue
 		fee, err := s.txService.ValidateOffChainTx(txs[i])
 		if err != nil {
 			return nil, err

@@ -19,16 +19,31 @@ type IBlockContentDB interface {
 
 type BlockContentDB struct {
 	IBaseDB[merkle.MerkleTree[*model.Transaction]]
+	txDB ITransactionDB
 }
 
 func NewBlockContentDB(db *leveldb.DB) IBlockContentDB {
 	basedb := &BaseDB[merkle.MerkleTree[*model.Transaction]]{Database: db}
-	blockContentDB := &BlockContentDB{IBaseDB: basedb}
+	blockContentDB := &BlockContentDB{IBaseDB: basedb, txDB: NewTransactionDB(db)}
 	return blockContentDB
 }
 
 func (db *BlockContentDB) SaveBlockContent(key []byte, content *merkle.MerkleTree[*model.Transaction]) error {
-	return db.Save([]byte(BlockContentTable), key, content)
+	err := db.Save([]byte(BlockContentTable), key, content)
+	if err != nil {
+		return err
+	}
+
+	//TODO: do we need save txs if the block is not in the main chain
+	//TODO: save txs and block content in one db transaction
+	for _, tx := range content.GetVals() {
+		err = db.txDB.SaveOnChainTx(tx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (db *BlockContentDB) GetBlockContent(key []byte) (*merkle.MerkleTree[*model.Transaction], error) {

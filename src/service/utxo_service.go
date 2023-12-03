@@ -19,12 +19,32 @@ func (service *UtxoService) GetBalance(pubkey []byte) uint64 {
 	return val
 }
 
-func (service *UtxoService) AddBalance(out *model.Out) {
+func (service *UtxoService) UpdateBalances(txs []*model.Transaction) {
+	for _, tx := range txs {
+		log.Printf("updating balance for %x", tx.Hash)
+		for _, in := range tx.Ins {
+			service.reduceBalance(in.PrevOut)
+		}
+
+		for _, out := range tx.Outs {
+			service.addBalance(out)
+		}
+		log.Printf("updated balance for %x", tx.Hash)
+	}
+}
+
+func (service *UtxoService) addBalance(out *model.Out) {
 	log.Printf("add %x to uxto", out.Pubkey[:10])
 	service.utxo[string(out.Pubkey)] += out.Value
 }
 
-func (service *UtxoService) ReduceBalance(out *model.Out) error {
+func (service *UtxoService) reduceBalance(out *model.Out) error {
+	if service.utxo == nil {
+		log.Fatal("uxto is nil")
+	}
+	if out == nil {
+		log.Fatal("out is nil")
+	}
 	if service.utxo[string(out.Pubkey)] < out.Value {
 		return errors.ErrAccountNotEnoughValues
 	}

@@ -55,6 +55,7 @@ func main() {
 
 	register := grpc.NewServer()
 	protocol.RegisterTransactionServer(register, server)
+	protocol.RegisterBlockServer(register, server)
 	log.Printf("server listening at %v", listener.Addr())
 
 	if err := register.Serve(listener); err != nil {

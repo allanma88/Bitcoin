@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+//TODO: more test cases
+
 type BlockService struct {
 	blockDB        database.IBlockDB
 	blockContentDB database.IBlockContentDB
@@ -80,8 +82,6 @@ func (service *BlockService) Validate(block *model.Block) error {
 	if err != nil {
 		return err
 	}
-
-	//TODO: validate the txs of the block, must validate the prevtx existence of current block chain
 
 	return nil
 }

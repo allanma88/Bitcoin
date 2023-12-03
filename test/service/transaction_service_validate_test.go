@@ -88,24 +88,11 @@ func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 }
 
 func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
-	privkey, _ := test.NewKeys()
-
-	prevHash, err := cryptography.Hash("whatever")
-	if err != nil {
-		t.Fatalf("hash error: %s", err)
-	}
-
-	in := newIn(privkey, prevHash, 0)
-	tx := &model.Transaction{
-		Ins:       []*model.In{in},
-		Outs:      []*model.Out{},
-		Timestamp: time.Now(),
-	}
-	formalizeTx(tx)
+	_, tx := newTransactionPair(10, 8, time.Minute, nil, []byte{})
 
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb, service.NewUtxoService())
-	_, err = service.ValidateOffChainTx(tx)
+	_, err := service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrPrevTxNotFound) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
 	}
@@ -186,7 +173,7 @@ func Test_Validate_In_Sig_Mismatch(t *testing.T) {
 	}
 	formalizeTx(prevTx)
 
-	in := newIn(privkey, prevTx.Hash, 0)
+	in := newIn(privkey, prevTx, 0)
 	in.Signature = []byte{}
 
 	tx := &model.Transaction{
@@ -316,7 +303,7 @@ func newTransactionPair(prevVal, val uint64, duration time.Duration, prevBlockHa
 	formalizeTx(prevTx)
 
 	_, pubkey := test.NewKeys()
-	in := newIn(prevPrivkey, prevTx.Hash, 0)
+	in := newIn(prevPrivkey, prevTx, 0)
 
 	outs := newOuts(pubkey, val)
 	tx := &model.Transaction{
@@ -330,16 +317,17 @@ func newTransactionPair(prevVal, val uint64, duration time.Duration, prevBlockHa
 	return prevTx, tx
 }
 
-func newIn(privkey, prevHash []byte, index uint32) *model.In {
-	sig, err := cryptography.Sign(privkey, prevHash)
+func newIn(privkey []byte, prevTx *model.Transaction, index uint32) *model.In {
+	sig, err := cryptography.Sign(privkey, prevTx.Hash)
 	if err != nil {
 		log.Fatalf("sign prev hash error: %v", err)
 	}
 
 	in := &model.In{
-		PrevHash:  prevHash,
+		PrevHash:  prevTx.Hash,
 		Index:     index,
 		Signature: sig,
+		PrevOut:   prevTx.Outs[index],
 	}
 	return in
 }
@@ -383,10 +371,14 @@ func newTransactionDB(txs ...*model.Transaction) database.ITransactionDB {
 }
 
 func newTransactionService(txdb database.ITransactionDB, txs ...*model.Transaction) *service.TransactionService {
-	service := service.NewTransactionService(txdb, service.NewUtxoService())
-	err := service.ChainOnTxs(txs...)
-	if err != nil {
-		log.Fatalf("put txs on chain error: %v", err)
+	utxoService := service.NewUtxoService()
+	service := service.NewTransactionService(txdb, utxoService)
+	for _, tx := range txs {
+		err := service.ITransactionDB.SaveOnChainTx(tx)
+		if err != nil {
+			log.Fatalf("put tx %x on chain error: %v", tx.Hash, err)
+		}
 	}
+	utxoService.UpdateBalances(txs)
 	return service
 }

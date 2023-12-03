@@ -7,6 +7,8 @@ import (
 	"sync"
 )
 
+//TODO: test cases
+
 type ChainService struct {
 	chains *collection.SortedSet[*model.Block]
 	lock   sync.Mutex
@@ -43,10 +45,10 @@ func (s *ChainService) SetChain(block *model.Block) bool {
 	defer s.lock.Unlock()
 
 	lastBlock := s.chains.First()
-	isMainChain := bytes.Equal(lastBlock.Hash, block.Prevhash)
+	switchChain := !bytes.Equal(lastBlock.Hash, block.Prevhash)
 
 	s.chains.Remove(block.PrevBlock)
 	s.chains.Insert(block)
 
-	return isMainChain
+	return switchChain
 }
