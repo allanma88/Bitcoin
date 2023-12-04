@@ -9,14 +9,12 @@ import (
 )
 
 type TransactionService struct {
-	utxo *UtxoService
 	database.ITransactionDB
 }
 
-func NewTransactionService(db database.ITransactionDB, utxo *UtxoService) *TransactionService {
+func NewTransactionService(db database.ITransactionDB) *TransactionService {
 	service := &TransactionService{
 		ITransactionDB: db,
-		utxo:           utxo,
 	}
 	return service
 }
@@ -41,17 +39,6 @@ func (service *TransactionService) ValidateOnChainTxs(txs []*model.Transaction, 
 func (service *TransactionService) ValidateOffChainTx(tx *model.Transaction) (uint64, error) {
 	return service.validate(tx, nil, false)
 }
-
-// func (service *TransactionService) ChainOnTxs(txs ...*model.Transaction) error {
-// 	for _, tx := range txs {
-// 		err := service.ITransactionDB.SaveOnChainTx(tx)
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-//
-// 	return nil
-// }
 
 func (service *TransactionService) validateCoinbase(tx *model.Transaction, blockhash []byte, val uint64) error {
 	if _, err := service.validate(tx, blockhash, true); err != nil {
@@ -131,7 +118,7 @@ func (service *TransactionService) validateInputs(tx *model.Transaction, coinbas
 }
 
 func (service *TransactionService) validateInput(input *model.In, tx *model.Transaction) (uint64, error) {
-	prevTx, err := service.GetOnChainTx(input.PrevHash)
+	prevTx, err := service.GetTx(input.PrevHash)
 	if err != nil {
 		return 0, err
 	}
@@ -145,16 +132,13 @@ func (service *TransactionService) validateInput(input *model.In, tx *model.Tran
 		return 0, errors.ErrInTooLate
 	}
 
-	prevOutput := prevTx.Outs[input.Index]
-	if service.utxo.GetBalance(prevOutput.Pubkey) < prevOutput.Value {
-		return 0, errors.ErrAccountNotEnoughValues
-	}
+	input.PrevOut = prevTx.Outs[input.Index]
 
-	valid, err := cryptography.Verify(prevOutput.Pubkey, prevTx.Hash, input.Signature)
+	valid, err := cryptography.Verify(input.PrevOut.Pubkey, prevTx.Hash, input.Signature)
 	if !valid || err != nil {
 		return 0, errors.ErrInSigInvalid
 	}
-	return prevOutput.Value, nil
+	return input.PrevOut.Value, nil
 }
 
 func (service *TransactionService) validateOutputs(tx *model.Transaction) (uint64, error) {

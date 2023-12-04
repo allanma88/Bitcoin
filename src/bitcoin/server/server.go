@@ -31,7 +31,6 @@ type BitcoinServer struct {
 	txService           *service.TransactionService
 	blockService        *service.BlockService
 	txBroadcastQueue    chan *model.Transaction
-	blockQueue          chan *model.Block
 	blockBroadcastQueue chan *model.Block
 	mineQueue           chan *model.Transaction
 	pullBlockQueue      chan string
@@ -39,16 +38,14 @@ type BitcoinServer struct {
 }
 
 func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
-	utxoService := service.NewUtxoService()
 	server := &BitcoinServer{
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg),
-		utxoService:         utxoService,
+		utxoService:         service.NewUtxoService(),
 		chainService:        service.NewChainService(), //TODO: how to set when server restart?
-		txService:           service.NewTransactionService(txdb, utxoService),
+		txService:           service.NewTransactionService(txdb),
 		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
-		blockQueue:          make(chan *model.Block, BlockQueueSize),
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
 		mineQueue:           make(chan *model.Transaction, MaxTxSizePerBlock),
 		pullBlockQueue:      make(chan string, PullBlockQueueSize),
@@ -93,7 +90,7 @@ func (s *BitcoinServer) AddTx(ctx context.Context, request *protocol.Transaction
 }
 
 func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq) (*protocol.BlockReply, error) {
-	block, err := s.addBlock(request)
+	block, err := s.addBlockReq(request)
 	//if the prev block doesn't exist, then maybe we fall behind with current chain or a new main chain show up,
 	// so we need sync with the request node
 	if err == errors.ErrPrevBlockNotFound {
@@ -106,7 +103,6 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 	}
 
 	go func() {
-		s.blockQueue <- block
 		s.blockBroadcastQueue <- block
 	}()
 
@@ -130,26 +126,6 @@ func (s *BitcoinServer) BroadcastBlock() {
 	}
 }
 
-func (s *BitcoinServer) UpdateState() {
-	//TODO: how to handle when server is restart
-	for {
-		block := <-s.blockQueue
-		switchChain := s.chainService.SetChain(block)
-
-		if switchChain {
-			//TODO: rollback the uxto of prev main chain and execute the uxto of new main chain
-			//TODO: maybe rollback the tx of prev main chain and execute the tx of new main chain
-		} else {
-			if s.cfg.Server != block.Miner {
-				s.cancelFunc(errors.ErrServerCancelMining)
-			}
-
-			txs := block.GetTxs()
-			s.utxoService.UpdateBalances(txs)
-		}
-	}
-}
-
 func (s *BitcoinServer) PullBlocks() {
 	for addr := range s.pullBlockQueue {
 		for {
@@ -165,7 +141,7 @@ func (s *BitcoinServer) PullBlocks() {
 			blocks := make([]*model.Block, 0, len(blockReqs))
 			var block *model.Block
 			for _, blockReq := range blockReqs {
-				block, err = s.addBlock(blockReq)
+				block, err = s.addBlockReq(blockReq)
 				if err == errors.ErrBlockExist {
 					// it's possible that my main chain is not main chain anymore,
 					// so I pull all blocks of the new main chain, the new main chain is side chain previously,
@@ -181,13 +157,6 @@ func (s *BitcoinServer) PullBlocks() {
 
 			for _, block := range blocks {
 				s.blockBroadcastQueue <- block
-			}
-
-			if len(blocks) > 0 {
-				s.blockQueue <- blocks[0]
-			}
-			if len(blocks) > 1 {
-				s.blockQueue <- blocks[len(blocks)-1]
 			}
 
 			if err != nil {
@@ -221,41 +190,83 @@ func (s *BitcoinServer) MineBlock(ctx context.Context) {
 			continue
 		}
 
-		s.blockQueue <- block
+		if err = s.addBlock(block); err != nil {
+			log.Printf("add block error: %v", err)
+			continue
+		}
 		s.blockBroadcastQueue <- block
 	}
 }
 
-func (s *BitcoinServer) addBlock(blockReq *protocol.BlockReq) (*model.Block, error) {
+func (s *BitcoinServer) addBlockReq(blockReq *protocol.BlockReq) (*model.Block, error) {
 	block, err := model.BlockFrom(blockReq)
 	if err != nil {
 		return nil, err
 	}
 	log.Printf("received block: %x", block.Hash)
 
-	err = s.blockService.Validate(block)
-	if err != nil {
+	if err = s.addBlock(block); err != nil {
 		return nil, err
+	}
+
+	return block, nil
+}
+
+func (s *BitcoinServer) addBlock(block *model.Block) error {
+	err := s.blockService.Validate(block)
+	if err != nil {
+		return err
 	}
 	log.Printf("validated block: %x", block.Hash)
 
-	//TODO: must validate the prevtx existence of current block chain
-
 	reward := block.GetNextReward(s.cfg.BlocksPerRewrad)
 	txs := block.GetTxs()
-	err = s.txService.ValidateOnChainTxs(txs, block.Hash, reward)
-	if err != nil {
-		return nil, err
+
+	if err = s.txService.ValidateOnChainTxs(txs, block.Hash, reward); err != nil {
+		return err
 	}
 
-	err = s.blockService.SaveBlock(block)
-	if err != nil {
+	if err = s.applyBlock(block); err != nil {
+		log.Printf("apply block %x failed: %v", block.Hash, err)
+		return err
+	}
+
+	if err = s.blockService.SaveBlock(block); err != nil {
 		log.Printf("save block %x failed: %v", block.Hash, err)
-		return nil, err
+		return err
 	}
 	log.Printf("saved block: %x", block.Hash)
 
-	return block, nil
+	return nil
+}
+
+func (s *BitcoinServer) applyBlock(block *model.Block) error {
+	applyBlocks, rollbackBlocks := s.chainService.SetChain(block)
+
+	if applyBlocks != nil && rollbackBlocks != nil {
+		for i := 0; i < len(rollbackBlocks); i++ {
+			txs := rollbackBlocks[i].GetTxs()
+			if err := s.utxoService.RollbackBalances(txs); err != nil {
+				return nil
+			}
+		}
+		for i := len(applyBlocks) - 1; i >= 0; i-- {
+			txs := applyBlocks[i].GetTxs()
+			if err := s.utxoService.ApplyBalances(txs); err != nil {
+				return err
+			}
+		}
+	} else {
+		if s.cfg.Server != block.Miner {
+			s.cancelFunc(errors.ErrServerCancelMining)
+		}
+
+		txs := block.GetTxs()
+		if err := s.utxoService.ApplyBalances(txs); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *BitcoinServer) receiveTxs(reward uint64) ([]*model.Transaction, error) {

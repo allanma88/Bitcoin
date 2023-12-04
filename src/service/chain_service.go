@@ -40,15 +40,28 @@ func (s *ChainService) GetChainHashes(n int) [][]byte {
 	return blockHashes
 }
 
-func (s *ChainService) SetChain(block *model.Block) bool {
+func (s *ChainService) SetChain(block *model.Block) ([]*model.Block, []*model.Block) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	lastBlock := s.chains.First()
-	switchChain := !bytes.Equal(lastBlock.Hash, block.Prevhash)
 
 	s.chains.Remove(block.PrevBlock)
 	s.chains.Insert(block)
 
-	return switchChain
+	applyBlocks := make([]*model.Block, 0)
+	rollbackBlocks := make([]*model.Block, 0)
+
+	if !bytes.Equal(lastBlock.Hash, block.Prevhash) {
+		for !bytes.Equal(lastBlock.Hash, block.Hash) {
+			rollbackBlocks = append(rollbackBlocks, lastBlock)
+			applyBlocks = append(applyBlocks, block)
+
+			block = block.PrevBlock
+			lastBlock = lastBlock.PrevBlock
+		}
+		return applyBlocks, rollbackBlocks
+	}
+
+	return nil, nil
 }

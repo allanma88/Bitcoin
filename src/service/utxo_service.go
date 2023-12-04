@@ -3,8 +3,9 @@ package service
 import (
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
-	"log"
 )
+
+//TODO: test cases
 
 type UtxoService struct {
 	utxo map[string]uint64
@@ -19,40 +20,53 @@ func (service *UtxoService) GetBalance(pubkey []byte) uint64 {
 	return val
 }
 
-func (service *UtxoService) UpdateBalances(txs []*model.Transaction) {
+func (service *UtxoService) RollbackBalances(txs []*model.Transaction) error {
+	utxo := make(map[string]int64)
 	for _, tx := range txs {
-		log.Printf("updating balance for %x", tx.Hash)
 		for _, in := range tx.Ins {
-			service.reduceBalance(in.PrevOut)
+			utxo[string(in.PrevOut.Pubkey)] += int64(in.PrevOut.Value)
 		}
 
 		for _, out := range tx.Outs {
-			service.addBalance(out)
+			utxo[string(out.Pubkey)] -= int64(out.Value)
 		}
-		log.Printf("updated balance for %x", tx.Hash)
 	}
+	for addr, val := range utxo {
+		if int64(service.utxo[addr])+val < 0 {
+			return errors.ErrAccountNotEnoughValues
+		}
+	}
+	for addr, val := range utxo {
+		service.utxo[addr] += uint64(val)
+		if service.utxo[addr] == 0 {
+			delete(service.utxo, addr)
+		}
+	}
+	return nil
 }
 
-func (service *UtxoService) addBalance(out *model.Out) {
-	log.Printf("add %x to uxto", out.Pubkey[:10])
-	service.utxo[string(out.Pubkey)] += out.Value
-}
+// TODO: test case: apply all or none
+func (service *UtxoService) ApplyBalances(txs []*model.Transaction) error {
+	utxo := make(map[string]int64)
+	for _, tx := range txs {
+		for _, in := range tx.Ins {
+			utxo[string(in.PrevOut.Pubkey)] -= int64(in.PrevOut.Value)
+		}
 
-func (service *UtxoService) reduceBalance(out *model.Out) error {
-	if service.utxo == nil {
-		log.Fatal("uxto is nil")
+		for _, out := range tx.Outs {
+			utxo[string(out.Pubkey)] += int64(out.Value)
+		}
 	}
-	if out == nil {
-		log.Fatal("out is nil")
+	for addr, val := range utxo {
+		if int64(service.utxo[addr])+val < 0 {
+			return errors.ErrAccountNotEnoughValues
+		}
 	}
-	if service.utxo[string(out.Pubkey)] < out.Value {
-		return errors.ErrAccountNotEnoughValues
-	}
-
-	service.utxo[string(out.Pubkey)] -= out.Value
-	if service.utxo[string(out.Pubkey)] == 0 {
-		log.Printf("remove %x from uxto", out.Pubkey[:10])
-		delete(service.utxo, string(out.Pubkey))
+	for addr, val := range utxo {
+		service.utxo[addr] += uint64(val)
+		if service.utxo[addr] == 0 {
+			delete(service.utxo, addr)
+		}
 	}
 	return nil
 }

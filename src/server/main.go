@@ -45,7 +45,6 @@ func main() {
 	go server.MineBlock(ctx)
 	go server.BroadcastTx()
 	go server.BroadcastBlock()
-	go server.UpdateState()
 	go server.PullBlocks()
 
 	listener, err := net.Listen("tcp", cfg.Endpoint)

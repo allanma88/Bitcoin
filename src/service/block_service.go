@@ -86,20 +86,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 	return nil
 }
 
-func (serv *BlockService) MineBlock(lastBlock *model.Block, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
-	block, err := serv.MakeBlock(lastBlock, transactions, ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	err = serv.SaveBlock(block)
-	if err != nil {
-		return nil, err
-	}
-	return block, nil
-}
-
-func (service *BlockService) MakeBlock(lastBlock *model.Block, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
+func (service *BlockService) MineBlock(lastBlock *model.Block, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
 	content, err := merkle.BuildTree(transactions)
 	if err != nil {
 		return nil, err
