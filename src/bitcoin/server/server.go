@@ -174,7 +174,7 @@ func (s *BitcoinServer) PullBlocks() {
 func (s *BitcoinServer) MineBlock(ctx context.Context) {
 	for {
 		lastBlock := s.chainService.GetMainChain()
-		reward := lastBlock.GetNextReward(s.cfg.BlocksPerRewrad)
+		reward := lastBlock.GetNextReward(s.cfg.InitRewrad, s.cfg.BlocksPerRewrad)
 
 		txs, err := s.receiveTxs(reward)
 		if err != nil {
@@ -219,7 +219,7 @@ func (s *BitcoinServer) addBlock(block *model.Block) error {
 	}
 	log.Printf("validated block: %x", block.Hash)
 
-	reward := block.GetNextReward(s.cfg.BlocksPerRewrad)
+	reward := block.GetNextReward(s.cfg.InitRewrad, s.cfg.BlocksPerRewrad)
 	txs := block.GetTxs()
 
 	if err = s.txService.ValidateOnChainTxs(txs, block.Hash, reward); err != nil {

@@ -15,6 +15,7 @@ const (
 	DefaultBlocksPerRewrad     = 210 * 1000
 	DefaultBlockInterval       = 60
 	DefaultInitDifficultyLevel = 8
+	DefaultInitReward          = 50
 )
 
 type Config struct {
@@ -24,6 +25,7 @@ type Config struct {
 	Bootstraps          []string
 	BlocksPerDifficulty uint64
 	BlocksPerRewrad     uint64
+	InitRewrad          uint64
 	BlockInterval       uint64
 	InitDifficultyLevel uint64
 	MinerPubkey         []byte
@@ -75,6 +77,10 @@ func Read(path string) (*Config, error) {
 
 	if config.BlocksPerRewrad == 0 {
 		config.BlocksPerRewrad = DefaultBlocksPerRewrad
+	}
+
+	if config.InitRewrad == 0 {
+		config.InitRewrad = DefaultInitReward
 	}
 
 	if config.BlockInterval == 0 {

@@ -17,10 +17,6 @@ import (
 	"github.com/peteprogrammer/go-automapper"
 )
 
-const (
-	InitReward = 50 //TODO: make configurable
-)
-
 type Block struct {
 	Hash          []byte
 	Number        uint64
@@ -182,8 +178,8 @@ func (block *Block) GetNextDifficulty(blocksPerDifficulty, expectBlockInterval u
 	return difficulty
 }
 
-func (block *Block) GetNextReward(blocksPerRewrad uint64) uint64 {
-	return InitReward / (block.Number/blocksPerRewrad + 1)
+func (block *Block) GetNextReward(initReward, blocksPerRewrad uint64) uint64 {
+	return initReward / (block.Number/blocksPerRewrad + 1)
 }
 
 func (block *Block) GetNextTotalInterval(t time.Time, blocksPerDifficulty uint64) uint64 {
