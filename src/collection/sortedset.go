@@ -15,7 +15,7 @@ func (set *SortedSet[T]) First() T {
 	return *new(T)
 }
 
-func (set *SortedSet[T]) Top(n int) []T {
+func (set *SortedSet[T]) Top(m, n int) []T {
 	log.Fatal("not implemented")
 	return nil
 }
@@ -26,4 +26,8 @@ func (set *SortedSet[T]) Insert(t T) {
 
 func (set *SortedSet[T]) Remove(t T) {
 	log.Fatal("not implemented")
+}
+
+func (set *SortedSet[T]) Len() int {
+	return 0
 }

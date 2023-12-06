@@ -28,11 +28,11 @@ func (s *ChainService) GetMainChain() *model.Block {
 	return s.chains.First()
 }
 
-func (s *ChainService) GetChainHashes(n int) [][]byte {
+func (s *ChainService) GetChainHashes(m, n int) [][]byte {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	blocks := s.chains.Top(n)
+	blocks := s.chains.Top(m, n)
 	blockHashes := make([][]byte, len(blocks))
 	for i := 0; i < len(blocks); i++ {
 		blockHashes[i] = blocks[i].Hash
@@ -64,4 +64,8 @@ func (s *ChainService) SetChain(block *model.Block) ([]*model.Block, []*model.Bl
 	}
 
 	return nil, nil
+}
+
+func (s *ChainService) ChainLen() int {
+	return s.chains.Len()
 }

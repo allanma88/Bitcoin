@@ -83,7 +83,6 @@ func NewTransaction(blockHash []byte) *model.Transaction {
 func NewBlock(number uint64, difficultyLevel uint64, prevhash []byte) *model.Block {
 	txs := make([]*model.Transaction, 4)
 	for i := 0; i < len(txs); i++ {
-		//TODO: prev tx hash
 		txs[i] = NewTransaction([]byte{})
 	}
 

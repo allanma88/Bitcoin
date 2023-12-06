@@ -8,17 +8,15 @@ import (
 	"Bitcoin/src/protocol"
 	"Bitcoin/src/service"
 	"context"
-	"fmt"
 	"log"
+	"sync"
 )
 
 const (
-	InitReward              = 50
 	TxBroadcastQueueSize    = 10
 	BlockBroadcastQueueSize = 10
 	BlockQueueSize          = 10
 	PullBlockQueueSize      = 10000
-	MaxTxSizePerBlock       = 10
 )
 
 type BitcoinServer struct {
@@ -30,10 +28,12 @@ type BitcoinServer struct {
 	chainService        *service.ChainService
 	txService           *service.TransactionService
 	blockService        *service.BlockService
+	syncService         *service.SyncService
+	mineService         *service.MineService
 	txBroadcastQueue    chan *model.Transaction
 	blockBroadcastQueue chan *model.Block
 	mineQueue           chan *model.Transaction
-	pullBlockQueue      chan string
+	syncBlockQueue      chan string
 	cancelFunc          context.CancelCauseFunc
 }
 
@@ -47,10 +47,13 @@ func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb 
 		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
-		mineQueue:           make(chan *model.Transaction, MaxTxSizePerBlock),
-		pullBlockQueue:      make(chan string, PullBlockQueueSize),
+		mineQueue:           make(chan *model.Transaction, service.MaxTxSizePerBlock),
+		syncBlockQueue:      make(chan string, PullBlockQueueSize),
 		cancelFunc:          cancelFunc,
 	}
+	server.syncService = service.NewSyncService(server.chainService, server.nodeService, server.addBlock)
+	server.mineService = service.NewMineService(cfg, server.txService, server.mineQueue)
+
 	return server, nil
 }
 
@@ -90,28 +93,49 @@ func (s *BitcoinServer) AddTx(ctx context.Context, request *protocol.Transaction
 }
 
 func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq) (*protocol.BlockReply, error) {
-	block, err := s.addBlockReq(request)
+	block, err := model.BlockFrom(request)
+	if err != nil {
+		return &protocol.BlockReply{Result: false}, err
+	}
+	log.Printf("received block: %x", block.Hash)
+
+	err = s.addBlock(block)
 	//if the prev block doesn't exist, then maybe we fall behind with current chain or a new main chain show up,
 	// so we need sync with the request node
 	if err == errors.ErrPrevBlockNotFound {
+		//TODO: maybe create many threads here, maybe change to sync send node?
 		go func() {
-			s.pullBlockQueue <- request.Node
+			s.syncBlockQueue <- request.Node
 		}()
 	}
 	if err != nil {
 		return &protocol.BlockReply{Result: false}, err
 	}
 
-	go func() {
-		s.blockBroadcastQueue <- block
-	}()
-
 	return &protocol.BlockReply{Result: true}, nil
 }
 
 func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
 	//TODO: return blocks of the main chain of the current node
-	return nil, fmt.Errorf("GetBlocks API not implemented")
+	mainChain := s.chainService.GetMainChain()
+	blocks, end, err := s.blockService.GetBlocks(mainChain, request.Blockhashes)
+	if err != nil {
+		return &protocol.GetBlocksReply{}, err
+	}
+
+	blockReqs := make([]*protocol.BlockReq, len(blocks))
+	for i := 0; i < len(blocks); i++ {
+		blockReq, err := model.BlockTo(blocks[i])
+		if err != nil {
+			return &protocol.GetBlocksReply{}, err
+		}
+		blockReqs[i] = blockReq
+	}
+	reply := &protocol.GetBlocksReply{
+		Blocks: blockReqs,
+		End:    end,
+	}
+	return reply, nil
 }
 
 func (s *BitcoinServer) BroadcastTx() {
@@ -126,66 +150,22 @@ func (s *BitcoinServer) BroadcastBlock() {
 	}
 }
 
-func (s *BitcoinServer) PullBlocks() {
-	for addr := range s.pullBlockQueue {
-		for {
-			//TODO: lastBlock should be not same each time if we saved any of blockReqs
-			//TODO: maybe stop the mining when pull blocks?
-			lastBlockHashes := s.chainService.GetChainHashes(10)
-			blockReqs, end, err := s.nodeService.GetBlocks(lastBlockHashes, addr)
-			if err != nil {
-				log.Printf("get blocks from %v error: %v", addr, err)
-				break
-			}
-
-			blocks := make([]*model.Block, 0, len(blockReqs))
-			var block *model.Block
-			for _, blockReq := range blockReqs {
-				block, err = s.addBlockReq(blockReq)
-				if err == errors.ErrBlockExist {
-					// it's possible that my main chain is not main chain anymore,
-					// so I pull all blocks of the new main chain, the new main chain is side chain previously,
-					// some blocks of the new main chain already exist, so ignore this error
-					continue
-				}
-				if err != nil {
-					break
-				}
-
-				blocks = append(blocks, block)
-			}
-
-			for _, block := range blocks {
-				s.blockBroadcastQueue <- block
-			}
-
-			if err != nil {
-				log.Printf("add blocks from %v error: %v", addr, err)
-				break
-			}
-
-			if len(blocks) > 0 && blocks[len(blocks)-1].Number == end {
-				break
-			}
-		}
+func (s *BitcoinServer) SyncBlocks(wait *sync.WaitGroup) {
+	for addr := range s.syncBlockQueue {
+		// cancel mining
+		s.cancelFunc(errors.ErrServerCancelMining)
+		// pending the mining task
+		wait.Add(1)
+		s.syncService.SyncBlocks(addr)
+		wait.Done()
 	}
 }
 
-func (s *BitcoinServer) MineBlock(ctx context.Context) {
+func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
 	for {
 		lastBlock := s.chainService.GetMainChain()
-		reward := lastBlock.GetNextReward(s.cfg.InitRewrad, s.cfg.BlocksPerRewrad)
-
-		txs, err := s.receiveTxs(reward)
+		block, err := s.mineService.MineBlock(lastBlock, ctx, wait)
 		if err != nil {
-			//TODO: maybe fatal err?
-			log.Printf("receive txs error: %v", err)
-			continue
-		}
-
-		block, err := s.blockService.MineBlock(lastBlock, txs, ctx)
-		if err != nil {
-			//TODO: maybe fatal err?
 			log.Printf("mine block error: %v", err)
 			continue
 		}
@@ -194,22 +174,7 @@ func (s *BitcoinServer) MineBlock(ctx context.Context) {
 			log.Printf("add block error: %v", err)
 			continue
 		}
-		s.blockBroadcastQueue <- block
 	}
-}
-
-func (s *BitcoinServer) addBlockReq(blockReq *protocol.BlockReq) (*model.Block, error) {
-	block, err := model.BlockFrom(blockReq)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("received block: %x", block.Hash)
-
-	if err = s.addBlock(block); err != nil {
-		return nil, err
-	}
-
-	return block, nil
 }
 
 func (s *BitcoinServer) addBlock(block *model.Block) error {
@@ -237,6 +202,8 @@ func (s *BitcoinServer) addBlock(block *model.Block) error {
 	}
 	log.Printf("saved block: %x", block.Hash)
 
+	s.blockBroadcastQueue <- block
+
 	return nil
 }
 
@@ -244,48 +211,17 @@ func (s *BitcoinServer) applyBlock(block *model.Block) error {
 	applyBlocks, rollbackBlocks := s.chainService.SetChain(block)
 
 	if applyBlocks != nil && rollbackBlocks != nil {
-		for i := 0; i < len(rollbackBlocks); i++ {
-			txs := rollbackBlocks[i].GetTxs()
-			if err := s.utxoService.RollbackBalances(txs); err != nil {
-				return nil
-			}
-		}
-		for i := len(applyBlocks) - 1; i >= 0; i-- {
-			txs := applyBlocks[i].GetTxs()
-			if err := s.utxoService.ApplyBalances(txs); err != nil {
-				return err
-			}
+		if err := s.utxoService.SwitchBalances(rollbackBlocks, applyBlocks); err != nil {
+			return err
 		}
 	} else {
 		if s.cfg.Server != block.Miner {
 			s.cancelFunc(errors.ErrServerCancelMining)
 		}
 
-		txs := block.GetTxs()
-		if err := s.utxoService.ApplyBalances(txs); err != nil {
+		if err := s.utxoService.ApplyBalances(block); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func (s *BitcoinServer) receiveTxs(reward uint64) ([]*model.Transaction, error) {
-	txs := make([]*model.Transaction, MaxTxSizePerBlock)
-	var totalFee uint64 = 0
-	for i := 1; i < MaxTxSizePerBlock; i++ {
-		txs[i] = <-s.mineQueue
-		fee, err := s.txService.ValidateOffChainTx(txs[i])
-		if err != nil {
-			return nil, err
-		}
-		totalFee += fee
-	}
-
-	coinbaseTx, err := model.MakeCoinbaseTx(s.cfg.MinerPubkey, reward+totalFee)
-	if err != nil {
-		return nil, err
-	}
-
-	txs[0] = coinbaseTx
-	return txs, nil
 }

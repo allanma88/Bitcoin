@@ -34,7 +34,7 @@ func (db *BlockContentDB) SaveBlockContent(key []byte, content *merkle.MerkleTre
 		return err
 	}
 
-	//TODO: do we need save txs if the block is not in the main chain
+	//TODO: save an index of tx, not the entire tx, so not save duplicate with tx in the block
 	//TODO: save txs and block content in one db transaction
 	for _, tx := range content.GetVals() {
 		err = db.txDB.SaveOnChainTx(tx)

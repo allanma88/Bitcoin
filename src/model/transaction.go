@@ -13,7 +13,7 @@ import (
 
 type In struct {
 	PrevHash  []byte
-	PrevOut   *Out
+	PrevOut   *Out //TODO: waste memory
 	Index     uint32
 	Signature []byte
 }

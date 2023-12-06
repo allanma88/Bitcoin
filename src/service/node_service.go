@@ -119,6 +119,7 @@ func broadcastReq[Q, R any](service *NodeService, req Q, send sendFunc[Q, R]) {
 	wg := &sync.WaitGroup{}
 
 	key := service.nodes.FirstKey()
+	//TODO: should broadcast part of nodes, not all of them
 	for i := 0; i < service.nodes.Len(); i++ {
 		node := service.nodes.Get(key)
 		wg.Add(1)

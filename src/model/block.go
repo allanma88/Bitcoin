@@ -6,6 +6,7 @@ import (
 	"Bitcoin/src/infra"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/protocol"
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -28,7 +29,7 @@ type Block struct {
 	Body          *merkle.MerkleTree[*Transaction]
 	TotalInterval uint64
 	Miner         string
-	PrevBlock     *Block
+	PrevBlock     *Block //TODO: waste memory
 }
 
 type jBlock struct {
@@ -93,6 +94,17 @@ func (block *Block) UnmarshalJSON(data []byte) error {
 	block.TotalInterval = s.TotalInterval
 	block.Miner = s.Miner
 	return err
+}
+
+func (block *Block) Ancestors(ancestor *Block) []*Block {
+	ancestors := make([]*Block, 0)
+	for ; block != nil; block = block.PrevBlock {
+		if bytes.Equal(ancestor.Hash, block.Hash) {
+			return ancestors
+		}
+		ancestors = append([]*Block{block}, ancestors...)
+	}
+	return nil
 }
 
 func BlockFrom(request *protocol.BlockReq) (*Block, error) {

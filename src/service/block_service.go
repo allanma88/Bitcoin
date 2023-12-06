@@ -8,9 +8,11 @@ import (
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"bytes"
-	"context"
 	"log"
-	"time"
+)
+
+const (
+	MaxBlocksPerGetBlockReq = 100
 )
 
 //TODO: more test cases
@@ -29,8 +31,24 @@ func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockCo
 	}
 }
 
-func (service *BlockService) GetBlocks() []*model.Block {
-	return nil
+func (service *BlockService) GetBlocks(mainChain *model.Block, blockhashes [][]byte) ([]*model.Block, uint64, error) {
+	for _, blockHash := range blockhashes {
+		block, err := service.blockDB.GetBlock(blockHash)
+		if err != nil {
+			return nil, 0, err
+		}
+		ancestors := mainChain.Ancestors(block)
+		if ancestors != nil {
+			var end uint64
+			if len(ancestors) > 0 {
+				end = ancestors[len(ancestors)-1].Number
+			} else {
+				end = block.Number
+			}
+			return ancestors[:MaxBlocksPerGetBlockReq], end, nil
+		}
+	}
+	return nil, 0, nil
 }
 
 func (service *BlockService) SaveBlock(block *model.Block) error {
@@ -84,40 +102,6 @@ func (service *BlockService) Validate(block *model.Block) error {
 	}
 
 	return nil
-}
-
-func (service *BlockService) MineBlock(lastBlock *model.Block, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
-	content, err := merkle.BuildTree(transactions)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	difficulty := lastBlock.GetNextDifficulty(service.cfg.BlocksPerDifficulty, service.cfg.BlockInterval)
-	totalInterval := lastBlock.GetNextTotalInterval(now, service.cfg.BlocksPerDifficulty)
-
-	block := &model.Block{
-		Number:        lastBlock.Number + 1,
-		Prevhash:      lastBlock.Hash,
-		RootHash:      content.Table[len(content.Table)-1][0].Hash,
-		Difficulty:    difficulty,
-		Time:          now,
-		TotalInterval: totalInterval,
-		Miner:         service.cfg.Server,
-		Body:          content,
-	}
-
-	hash, err := block.FindHash(ctx)
-	if err != nil {
-		return nil, err
-	}
-	block.Hash = hash
-
-	for _, tx := range transactions {
-		tx.BlockHash = hash
-	}
-
-	return block, nil
 }
 
 func validateDifficulty(hash []byte, difficulty float64) error {
