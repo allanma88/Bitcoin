@@ -1,6 +1,7 @@
 package model
 
 import (
+	"Bitcoin/src/collection"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/infra"
@@ -200,4 +201,19 @@ func (block *Block) GetNextTotalInterval(t time.Time, blocksPerDifficulty uint64
 	} else {
 		return block.TotalInterval + uint64(t.Sub(block.Time).Milliseconds())
 	}
+}
+
+func (block *Block) Compare(other collection.Comparable) int {
+	otherBlock := other.(*Block) //  getting  the instance of T via type assertion.
+	if block.Number < otherBlock.Number {
+		return -1
+	} else if block.Number == otherBlock.Number {
+		return 0
+	}
+	return 1
+}
+
+func (block *Block) Equal(other collection.Comparable) bool {
+	otherBlock := other.(*Block) //  getting  the instance of T via type assertion.
+	return bytes.Equal(block.Hash, otherBlock.Hash)
 }

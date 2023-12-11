@@ -25,14 +25,14 @@ func (s *ChainService) GetMainChain() *model.Block {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.chains.First()
+	return s.chains.Max()
 }
 
 func (s *ChainService) GetChainHashes(m, n int) [][]byte {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	blocks := s.chains.Top(m, n)
+	blocks := s.chains.TopMax(m, n)
 	blockHashes := make([][]byte, len(blocks))
 	for i := 0; i < len(blocks); i++ {
 		blockHashes[i] = blocks[i].Hash
@@ -44,7 +44,7 @@ func (s *ChainService) SetChain(block *model.Block) ([]*model.Block, []*model.Bl
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	lastBlock := s.chains.First()
+	lastBlock := s.chains.Max()
 
 	s.chains.Remove(block.PrevBlock)
 	s.chains.Insert(block)

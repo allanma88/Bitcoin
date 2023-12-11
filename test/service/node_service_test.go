@@ -174,7 +174,7 @@ func Test_RandomPick(t *testing.T) {
 		serv.AddNodes(&model.Node{Addr: fmt.Sprintf("localhost:%d", 5000+i+1)})
 	}
 
-	addrs := serv.RandomPick(service.MaxBroadcastNodes)
+	addrs := serv.RandomPickAddrs(service.MaxBroadcastNodes)
 	if len(addrs) != service.MaxBroadcastNodes+1 {
 		t.Fatalf("expect pick %v nodes, actual: %v", service.MaxBroadcastNodes+1, len(addrs))
 	}

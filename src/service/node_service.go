@@ -2,7 +2,6 @@ package service
 
 import (
 	"Bitcoin/src/bitcoin/client"
-	"Bitcoin/src/collection"
 	"Bitcoin/src/config"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
@@ -22,7 +21,7 @@ const (
 
 type NodeService struct {
 	lock  sync.RWMutex
-	nodes *collection.ListMap[string, *model.Node]
+	nodes map[string]*model.Node
 	cfg   *config.Config
 }
 
@@ -31,12 +30,12 @@ type sendFunc[Q, R any] func(cli client.IBitcoinClient, req Q) (R, error)
 func NewNodeService(cfg *config.Config) *NodeService {
 	service := &NodeService{
 		lock:  sync.RWMutex{},
-		nodes: collection.NewListMap[string, *model.Node](),
+		nodes: make(map[string]*model.Node),
 		cfg:   cfg,
 	}
 	if cfg.Bootstraps != nil {
 		for _, addr := range cfg.Bootstraps {
-			service.nodes.Set(addr, &model.Node{Addr: addr})
+			service.nodes[addr] = &model.Node{Addr: addr}
 		}
 	}
 	return service
@@ -59,14 +58,14 @@ func (service *NodeService) AddNodes(nodes ...*model.Node) error {
 		if node == nil {
 			log.Fatalf("node is nil")
 		}
-		service.nodes.Set(node.Addr, node)
+		service.nodes[node.Addr] = node
 	}
 	return nil
 }
 
 // TODO: remove?
 func (service *NodeService) GetNode(addr string) *model.Node {
-	return service.nodes.Get(addr)
+	return service.nodes[addr]
 }
 
 func (service *NodeService) SendTx(tx *model.Transaction) {
@@ -75,7 +74,7 @@ func (service *NodeService) SendTx(tx *model.Transaction) {
 	}
 
 	req := model.TransactionTo(tx)
-	req.Nodes = service.RandomPick(MaxBroadcastNodes)
+	req.Nodes = service.RandomPickAddrs(MaxBroadcastNodes)
 
 	broadcastReq[*protocol.TransactionReq](service, req, send)
 }
@@ -99,13 +98,13 @@ func (service *NodeService) GetBlocks(blockHashes [][]byte, addr string) ([]*pro
 	req := &protocol.GetBlocksReq{
 		Blockhashes: blockHashes,
 	}
-	node := service.nodes.Get(addr)
+	node := service.nodes[addr]
 	reply, err := node.Client.GetBlocks(req)
 	removed := node.UpdateState(err)
 
 	if removed {
 		service.lock.Lock()
-		service.nodes.Remove(addr)
+		delete(service.nodes, addr)
 		service.lock.Unlock()
 	}
 	if err != nil {
@@ -115,13 +114,11 @@ func (service *NodeService) GetBlocks(blockHashes [][]byte, addr string) ([]*pro
 }
 
 func broadcastReq[Q, R any](service *NodeService, req Q, send sendFunc[Q, R]) {
-	deleted := make([]string, 0, service.nodes.Len())
+	deleted := make([]string, 0, len(service.nodes))
 	wg := &sync.WaitGroup{}
 
-	key := service.nodes.FirstKey()
-	//TODO: should broadcast part of nodes, not all of them
-	for i := 0; i < service.nodes.Len(); i++ {
-		node := service.nodes.Get(key)
+	nodes := service.RandomPickNodes(MaxBroadcastNodes)
+	for _, node := range nodes {
 		wg.Add(1)
 		go func(n *model.Node) {
 			_, err := send(n.Client, req)
@@ -131,20 +128,22 @@ func broadcastReq[Q, R any](service *NodeService, req Q, send sendFunc[Q, R]) {
 			}
 			wg.Done()
 		}(node)
-		key = service.nodes.NextKey(key)
 	}
 	wg.Wait()
 
 	service.lock.Lock()
 	for _, node := range deleted {
-		service.nodes.Remove(node)
+		delete(service.nodes, node)
 	}
 	service.lock.Unlock()
 }
 
-func (service *NodeService) RandomPick(n int) []string {
+func (service *NodeService) RandomPickAddrs(n int) []string {
 	service.lock.RLock()
-	addrs := service.nodes.Keys()
+	addrs := make([]string, 0, len(service.nodes))
+	for k := range service.nodes {
+		addrs = append(addrs, k)
+	}
 	if n > len(addrs) {
 		n = len(addrs)
 	}
@@ -155,6 +154,25 @@ func (service *NodeService) RandomPick(n int) []string {
 	selects[0] = service.cfg.Endpoint
 	for i := 0; i < n; i++ {
 		selects = append(selects, addrs[indics[i]])
+	}
+	return selects
+}
+
+func (service *NodeService) RandomPickNodes(n int) []*model.Node {
+	service.lock.RLock()
+	nodes := make([]*model.Node, 0, len(service.nodes))
+	for _, node := range service.nodes {
+		nodes = append(nodes, node)
+	}
+	if n > len(nodes) {
+		n = len(nodes)
+	}
+	service.lock.RUnlock()
+
+	indics := rand.Perm(n)
+	selects := make([]*model.Node, 0, n)
+	for i := 0; i < n; i++ {
+		selects = append(selects, nodes[indics[i]])
 	}
 	return selects
 }
