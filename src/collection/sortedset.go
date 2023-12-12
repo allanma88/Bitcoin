@@ -8,8 +8,6 @@ const (
 	MaxLevel = 32
 )
 
-// TODO: test cases
-
 type Comparable interface {
 	Compare(another Comparable) int
 	Equal(another Comparable) bool
@@ -36,6 +34,9 @@ type skipListNode[T Comparable] struct {
 func NewSortedSet[T Comparable]() *SortedSet[T] {
 	header := &skipListNode[T]{
 		levels: make([]*skipListLevel[T], MaxLevel),
+	}
+	for l := 0; l < MaxLevel; l++ {
+		header.levels[l] = &skipListLevel[T]{}
 	}
 	return &SortedSet[T]{
 		header: header,
@@ -66,15 +67,18 @@ func (set *SortedSet[T]) TopMax(m, n int) []T {
 		}
 	}
 
-	for ; node.levels[0].forward != nil; node = node.levels[0].forward {
-		items = append(items, node.val)
+	for i := m; i < n; i++ {
+		if node.levels[0].forward != nil {
+			items = append(items, node.levels[0].forward.val)
+			node = node.levels[0].forward
+		} else {
+			break
+		}
 	}
 	return items
 }
 
 func (set *SortedSet[T]) Insert(t T) {
-	nodes := make([]*skipListNode[T], set.maxLevel)
-	spans := make([]int, set.maxLevel)
 	totalSpan := 0
 	node := set.header
 
@@ -83,24 +87,38 @@ func (set *SortedSet[T]) Insert(t T) {
 		set.maxLevel = nlevel
 	}
 
+	nodes := make([]*skipListNode[T], set.maxLevel)
+	spans := make([]int, set.maxLevel)
+
 	newnode := &skipListNode[T]{
 		val:    t,
 		levels: make([]*skipListLevel[T], nlevel),
 	}
+	for l := 0; l < nlevel; l++ {
+		newnode.levels[l] = &skipListLevel[T]{}
+	}
 
-	for i := set.maxLevel; i >= 0; i-- {
-		for ; node.levels[i].forward != nil; node = node.levels[i].forward {
-			if t.Compare(node.levels[i].forward.val) < 1 {
+	for l := set.maxLevel - 1; l >= 0; l-- {
+		for ; node.levels[l].forward != nil; node = node.levels[l].forward {
+			if t.Compare(node.levels[l].forward.val) < 1 {
 				break
 			}
-			totalSpan += node.levels[i].span
+			totalSpan += node.levels[l].span
 		}
-		nodes[i], spans[i] = node, totalSpan
+		nodes[l], spans[l] = node, totalSpan
 	}
+
+	forward := nodes[0].levels[0].forward
+	if forward != nil {
+		forward.backward = newnode
+	} else {
+		set.tail = newnode
+	}
+	newnode.backward = nodes[0]
 
 	for i := 0; i < set.maxLevel; i++ {
 		original := nodes[i].levels[i].forward
-		newnode.levels[i] = &skipListLevel[T]{forward: original}
+		newnode.levels[i].forward = original
 		nodes[i].levels[i].forward = newnode
 
 		if i < nlevel {
@@ -112,13 +130,6 @@ func (set *SortedSet[T]) Insert(t T) {
 		}
 	}
 
-	forward := nodes[0].levels[0].forward
-	if forward != nil {
-		forward.backward = newnode
-	} else {
-		set.tail = newnode
-	}
-	newnode.backward = nodes[0]
 	set.length++
 }
 
@@ -145,8 +156,9 @@ func (set *SortedSet[T]) Remove(t T) {
 
 	for i := set.maxLevel - 1; i >= 0; i-- {
 		if nodes[i].levels[i].forward != nil {
+			span := nodes[i].levels[i].forward.levels[i].span
 			nodes[i].levels[i].forward = nodes[i].levels[i].forward.levels[i].forward
-			nodes[i].levels[i].span += nodes[i].levels[i].forward.levels[i].span - 1
+			nodes[i].levels[i].span += span - 1
 		} else {
 			nodes[i].levels[i].span--
 		}
@@ -159,7 +171,7 @@ func (set *SortedSet[T]) Remove(t T) {
 	if nodes[0].levels[0].forward != nil {
 		nodes[0].levels[0].forward.backward = nodes[0]
 	} else {
-		set.tail = nodes[0].levels[0].forward
+		set.tail = nodes[0]
 	}
 
 	set.length--

@@ -204,7 +204,7 @@ func (block *Block) GetNextTotalInterval(t time.Time, blocksPerDifficulty uint64
 }
 
 func (block *Block) Compare(other collection.Comparable) int {
-	otherBlock := other.(*Block) //  getting  the instance of T via type assertion.
+	otherBlock := other.(*Block)
 	if block.Number < otherBlock.Number {
 		return -1
 	} else if block.Number == otherBlock.Number {
@@ -214,6 +214,6 @@ func (block *Block) Compare(other collection.Comparable) int {
 }
 
 func (block *Block) Equal(other collection.Comparable) bool {
-	otherBlock := other.(*Block) //  getting  the instance of T via type assertion.
+	otherBlock := other.(*Block)
 	return bytes.Equal(block.Hash, otherBlock.Hash)
 }
