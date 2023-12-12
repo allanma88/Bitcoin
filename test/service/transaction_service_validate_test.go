@@ -30,7 +30,7 @@ func Test_Validate_Hash_Mismatch(t *testing.T) {
 	tx.Hash = hash
 
 	service := &service.TransactionService{}
-	_, err = service.Validate(tx)
+	_, err = service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrIdentityHashInvalid) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrIdentityHashInvalid, err)
 	}
@@ -45,9 +45,10 @@ func Test_Validate_Tx_Exists(t *testing.T) {
 	formalizeTx(tx)
 
 	txdb := newTransactionDB()
-	service := newTransactionService(txdb, tx)
+	service := newTransactionService(txdb)
+	service.SaveOffChainTx(tx)
 
-	_, err := service.Validate(tx)
+	_, err := service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrTxExist) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxExist, err)
 	}
@@ -64,7 +65,7 @@ func Test_Validate_Time_Too_Early(t *testing.T) {
 
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
-	_, err := service.Validate(tx)
+	_, err := service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrIdentityTooEarly) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrIdentityTooEarly, err)
 	}
@@ -80,33 +81,42 @@ func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
-	_, err := service.Validate(tx)
+	_, err := service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrInLenMismatch) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrInLenMismatch, err)
 	}
 }
 
 func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
-	privkey, _ := test.NewKeys()
-
-	prevHash, err := cryptography.Hash("whatever")
-	if err != nil {
-		t.Fatalf("hash error: %s", err)
-	}
-
-	in := newIn(privkey, prevHash, 0)
-	tx := &model.Transaction{
-		Ins:       []*model.In{in},
-		Outs:      []*model.Out{},
-		Timestamp: time.Now(),
-	}
-	formalizeTx(tx)
+	_, tx := newTransactionPair(10, 8, time.Minute, nil, []byte{})
 
 	txdb := newTransactionDB()
 	service := service.NewTransactionService(txdb)
-	_, err = service.Validate(tx)
+	_, err := service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrPrevTxNotFound) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
+	}
+}
+
+func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
+	prevTx, tx := newTransactionPair(10, 0, 0, nil, []byte{})
+	txdb := newTransactionDB()
+	service := newTransactionService(txdb, prevTx)
+
+	_, err := service.ValidateOffChainTx(tx)
+	if !errors.Is(err, bcerrors.ErrInTooLate) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrInTooLate, err)
+	}
+}
+
+func Test_Validate_Input_Time_Too_Late(t *testing.T) {
+	prevTx, tx := newTransactionPair(10, 0, -1*time.Minute, nil, []byte{})
+	txdb := newTransactionDB()
+	service := newTransactionService(txdb, prevTx)
+
+	_, err := service.ValidateOffChainTx(tx)
+	if !errors.Is(err, bcerrors.ErrInTooLate) {
+		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrInTooLate, err)
 	}
 }
 
@@ -120,66 +130,30 @@ func Test_Validate_Input_PrevTx_Out_Chain_Not_Found(t *testing.T) {
 		t.Fatalf("save prev tx on chain error: %v", err)
 	}
 
-	_, err = service.Validate(tx)
-	if !errors.Is(err, bcerrors.ErrPrevTxNotFound) {
-		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
-	}
-}
-
-func Test_Validate_Input_Time_Same_As_PrevTx(t *testing.T) {
-	prevTx, tx := newTransactionPair(10, 0, 0, nil, []byte{})
-	txdb := newTransactionDB()
-	service := newTransactionService(txdb, prevTx)
-
-	_, err := service.Validate(tx)
-	if !errors.Is(err, bcerrors.ErrInTooLate) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrInTooLate, err)
-	}
-}
-
-func Test_Validate_Input_Time_Too_Late(t *testing.T) {
-	prevTx, tx := newTransactionPair(10, 0, -1*time.Minute, nil, []byte{})
-	txdb := newTransactionDB()
-	service := newTransactionService(txdb, prevTx)
-
-	_, err := service.Validate(tx)
-	if !errors.Is(err, bcerrors.ErrInTooLate) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrInTooLate, err)
-	}
-}
-
-func Test_Validate_Account_Not_Enough_value(t *testing.T) {
-	prevTx, tx := newTransactionPair(10, 8, time.Minute, nil, nil)
-	_, pubkey := test.NewKeys()
-	outs := newOuts(pubkey, 8)
-	newTx := &model.Transaction{
-		Ins:       tx.Ins,
-		Outs:      outs,
-		BlockHash: []byte{},
-	}
-	formalizeTx(newTx)
-
-	txdb := newTransactionDB()
-	service := newTransactionService(txdb, prevTx, tx)
-
-	_, err := service.Validate(newTx)
-	if !errors.Is(err, bcerrors.ErrAccountNotEnoughValues) {
-		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrAccountNotEnoughValues, err)
+	_, err = service.ValidateOffChainTx(tx)
+	if err != nil {
+		t.Fatalf("transaction validate failed: %v", err)
 	}
 }
 
 func Test_Validate_In_Sig_Mismatch(t *testing.T) {
 	privkey, pubkey := test.NewKeys()
 
+	blockHash, err := cryptography.Hash("block")
+	if err != nil {
+		log.Fatalf("compute hash error: %v", err)
+	}
+
 	prevOuts := newOuts(pubkey, 10)
 	prevTx := &model.Transaction{
 		Ins:       []*model.In{},
 		Outs:      prevOuts,
 		Timestamp: time.Now(),
+		BlockHash: blockHash,
 	}
 	formalizeTx(prevTx)
 
-	in := newIn(privkey, prevTx.Hash, 0)
+	in := newIn(privkey, prevTx, 0)
 	in.Signature = []byte{}
 
 	tx := &model.Transaction{
@@ -192,23 +166,21 @@ func Test_Validate_In_Sig_Mismatch(t *testing.T) {
 	txdb := newTransactionDB()
 	service := newTransactionService(txdb, prevTx)
 
-	_, err := service.Validate(tx)
+	_, err = service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrInSigInvalid) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrInSigInvalid, err)
 	}
 }
 
 func Test_Validate_Outs_Len_Not_Match(t *testing.T) {
-	tx := &model.Transaction{
-		OutLen: 3,
-		Ins:    []*model.In{},
-		Outs:   []*model.Out{{}, {}},
-	}
+	prevTx, tx := newTransactionPair(10, 8, time.Minute, nil, []byte{})
+
+	tx.OutLen = uint32(len(tx.Outs)) + 1
 	formalizeTx(tx)
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
-	_, err := service.Validate(tx)
+	service := newTransactionService(txdb, prevTx)
+	_, err := service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrOutLenMismatch) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrOutLenMismatch, err)
 	}
@@ -219,7 +191,7 @@ func Test_Validate_Outs_Zero_Len(t *testing.T) {
 	txdb := newTransactionDB()
 	service := newTransactionService(txdb, prevTx)
 
-	_, err := service.Validate(tx)
+	_, err := service.ValidateOffChainTx(tx)
 	if err != nil {
 		t.Fatalf("transaction validate failed, expect success, actual %v", err)
 	}
@@ -230,7 +202,7 @@ func Test_Validate_Output_Value_Too_Small(t *testing.T) {
 	txdb := newTransactionDB()
 	service := newTransactionService(txdb, prevTx)
 
-	_, err := service.Validate(tx)
+	_, err := service.ValidateOffChainTx(tx)
 	if err != nil {
 		t.Fatalf("transaction validate failed, expect: success, actual %s", err)
 	}
@@ -242,7 +214,7 @@ func Test_Validate_Output_Value_Too_Large(t *testing.T) {
 	txdb := newTransactionDB()
 	service := newTransactionService(txdb, prevTx)
 
-	_, err := service.Validate(tx)
+	_, err := service.ValidateOffChainTx(tx)
 	if !errors.Is(err, bcerrors.ErrTxNotEnoughValues) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrTxNotEnoughValues, err)
 	}
@@ -256,7 +228,7 @@ func Test_Validate_Success(t *testing.T) {
 	txdb := newTransactionDB()
 	service := newTransactionService(txdb, prevTx)
 
-	fee, err := service.Validate(tx)
+	fee, err := service.ValidateOffChainTx(tx)
 	if err != nil {
 		t.Fatalf("transaction validate error: %s", err)
 	}
@@ -267,18 +239,14 @@ func Test_Validate_Success(t *testing.T) {
 }
 
 func Test_Validate_Hash_Not_Change(t *testing.T) {
-	tx := &model.Transaction{
-		Ins:       []*model.In{},
-		Outs:      []*model.Out{},
-		Timestamp: time.Now(),
-	}
-	formalizeTx(tx)
+	prevTx, tx := newTransactionPair(10, 8, time.Minute, nil, []byte{})
 
 	originalHash := tx.Hash
 
 	txdb := newTransactionDB()
-	service := service.NewTransactionService(txdb)
-	_, err := service.Validate(tx)
+	service := newTransactionService(txdb, prevTx)
+
+	_, err := service.ValidateOffChainTx(tx)
 	if err != nil {
 		t.Fatalf("validate transaction error: %s", err)
 	}
@@ -291,6 +259,17 @@ func Test_Validate_Hash_Not_Change(t *testing.T) {
 }
 
 func newTransactionPair(prevVal, val uint64, duration time.Duration, prevBlockHash, blockHash []byte) (*model.Transaction, *model.Transaction) {
+	blockhash, err := cryptography.Hash("block")
+	if err != nil {
+		log.Fatalf("compute hash error: %v", err)
+	}
+	if prevBlockHash == nil {
+		prevBlockHash = blockhash
+	}
+	if blockHash == nil {
+		blockHash = blockhash
+	}
+
 	prevPrivkey, prevPubkey := test.NewKeys()
 
 	now := time.Now()
@@ -304,7 +283,7 @@ func newTransactionPair(prevVal, val uint64, duration time.Duration, prevBlockHa
 	formalizeTx(prevTx)
 
 	_, pubkey := test.NewKeys()
-	in := newIn(prevPrivkey, prevTx.Hash, 0)
+	in := newIn(prevPrivkey, prevTx, 0)
 
 	outs := newOuts(pubkey, val)
 	tx := &model.Transaction{
@@ -318,16 +297,17 @@ func newTransactionPair(prevVal, val uint64, duration time.Duration, prevBlockHa
 	return prevTx, tx
 }
 
-func newIn(privkey, prevHash []byte, index uint32) *model.In {
-	sig, err := cryptography.Sign(privkey, prevHash)
+func newIn(privkey []byte, prevTx *model.Transaction, index uint32) *model.In {
+	sig, err := cryptography.Sign(privkey, prevTx.Hash)
 	if err != nil {
 		log.Fatalf("sign prev hash error: %v", err)
 	}
 
 	in := &model.In{
-		PrevHash:  prevHash,
+		PrevHash:  prevTx.Hash,
 		Index:     index,
 		Signature: sig,
+		PrevOut:   prevTx.Outs[index],
 	}
 	return in
 }
@@ -351,13 +331,6 @@ func formalizeTx(tx *model.Transaction) {
 	if tx.OutLen == 0 {
 		tx.OutLen = uint32(len(tx.Outs))
 	}
-	if tx.BlockHash == nil {
-		blockHash, err := cryptography.Hash("block")
-		if err != nil {
-			log.Fatalf("compute hash error: %v", err)
-		}
-		tx.BlockHash = blockHash
-	}
 
 	if tx.Timestamp.IsZero() {
 		tx.Timestamp = time.Now()
@@ -379,9 +352,11 @@ func newTransactionDB(txs ...*model.Transaction) database.ITransactionDB {
 
 func newTransactionService(txdb database.ITransactionDB, txs ...*model.Transaction) *service.TransactionService {
 	service := service.NewTransactionService(txdb)
-	err := service.ChainOnTxs(txs...)
-	if err != nil {
-		log.Fatalf("put txs on chain error: %v", err)
+	for _, tx := range txs {
+		err := service.ITransactionDB.SaveOnChainTx(tx)
+		if err != nil {
+			log.Fatalf("put tx %x on chain error: %v", tx.Hash, err)
+		}
 	}
 	return service
 }

@@ -9,6 +9,7 @@ import (
 	"flag"
 	"log"
 	"net"
+	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/grpc"
@@ -42,10 +43,12 @@ func main() {
 		log.Fatalf("failed to create server: %v", err)
 	}
 
-	go server.MineBlock(ctx)
+	wg := &sync.WaitGroup{}
+
+	go server.MineBlock(ctx, wg)
 	go server.BroadcastTx()
 	go server.BroadcastBlock()
-	go server.UpdateState()
+	go server.SyncBlocks(wg)
 
 	listener, err := net.Listen("tcp", cfg.Endpoint)
 	if err != nil {
@@ -54,6 +57,7 @@ func main() {
 
 	register := grpc.NewServer()
 	protocol.RegisterTransactionServer(register, server)
+	protocol.RegisterBlockServer(register, server)
 	log.Printf("server listening at %v", listener.Addr())
 
 	if err := register.Serve(listener); err != nil {

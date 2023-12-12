@@ -80,15 +80,10 @@ func NewTransaction(blockHash []byte) *model.Transaction {
 	return tx
 }
 
-func NewBlock(number uint64, difficultyLevel uint64) *model.Block {
-	prevHash, err := cryptography.Hash("prev")
-	if err != nil {
-		log.Fatalf("compute prev hash error: %s", err)
-	}
-
+func NewBlock(number uint64, difficultyLevel uint64, prevhash []byte) *model.Block {
 	txs := make([]*model.Transaction, 4)
 	for i := 0; i < len(txs); i++ {
-		txs[i] = NewTransaction(nil)
+		txs[i] = NewTransaction([]byte{})
 	}
 
 	tree, err := merkle.BuildTree(txs)
@@ -96,10 +91,17 @@ func NewBlock(number uint64, difficultyLevel uint64) *model.Block {
 		log.Fatalf("builder merkle tree error: %s", err)
 	}
 
+	if prevhash == nil {
+		prevhash, err = cryptography.Hash("prev")
+		if err != nil {
+			log.Fatalf("compute prev hash error: %s", err)
+		}
+	}
+
 	rootHash := tree.Table[len(tree.Table)-1][0].Hash
 
 	block := &model.Block{
-		Prevhash:   prevHash,
+		Prevhash:   prevhash,
 		Number:     number,
 		RootHash:   rootHash,
 		Difficulty: infra.ComputeDifficulty(infra.MakeDifficulty(difficultyLevel)),
@@ -112,6 +114,9 @@ func NewBlock(number uint64, difficultyLevel uint64) *model.Block {
 		log.Fatalf("find block hash error: %s", err)
 	}
 	block.Hash = hash
+	for _, tx := range txs {
+		tx.BlockHash = hash
+	}
 
 	return block
 }

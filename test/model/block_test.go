@@ -66,7 +66,7 @@ func (s *testBlock) equal(block *model.Block) (bool, string, string, string) {
 }
 
 func Test_Block_ComputeHash_Hash_Not_Change(t *testing.T) {
-	block := test.NewBlock(1, 10)
+	block := test.NewBlock(1, 10, nil)
 	hash, err := block.ComputeHash()
 	if err != nil {
 		t.Fatalf("compute hash error: %v", err)
@@ -80,7 +80,7 @@ func Test_Block_ComputeHash_Hash_Not_Change(t *testing.T) {
 }
 
 func Test_Block_Marshal(t *testing.T) {
-	block := test.NewBlock(1, 10)
+	block := test.NewBlock(1, 10, nil)
 	data, err := json.Marshal(block)
 	if err != nil {
 		t.Fatalf("marshal error: %v", err)
@@ -169,7 +169,7 @@ func Test_Block_From(t *testing.T) {
 }
 
 func Test_Block_To(t *testing.T) {
-	block := test.NewBlock(1, 10)
+	block := test.NewBlock(1, 10, nil)
 	req, err := model.BlockTo(block)
 	if err != nil {
 		t.Fatalf("block to err: %v", err)
@@ -193,7 +193,7 @@ func Test_Block_To(t *testing.T) {
 }
 
 func Test_Block_FindHash(t *testing.T) {
-	block := test.NewBlock(1, 10)
+	block := test.NewBlock(1, 10, nil)
 	hash, err := block.FindHash(context.TODO())
 	if err != nil {
 		t.Fatalf("find hash err: %v", err)

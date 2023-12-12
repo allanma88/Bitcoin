@@ -15,7 +15,6 @@ type ITransactionDB interface {
 	SaveOffChainTx(tx *model.Transaction) error
 	SaveOnChainTx(tx *model.Transaction) error
 	GetTx(hash []byte) (*model.Transaction, error)
-	GetOnChainTx(hash []byte) (*model.Transaction, error)
 	Close() error
 }
 
@@ -45,21 +44,6 @@ func (db *TransactionDB) GetTx(hash []byte) (*model.Transaction, error) {
 	tx, err = db.Get([]byte(OffChainTxTable), hash)
 	if tx != nil || err != nil {
 		return tx, err
-	}
-	return nil, nil
-}
-
-// TODO: add test case
-func (db *TransactionDB) GetOnChainTx(hash []byte) (*model.Transaction, error) {
-	tx, err := db.Get([]byte(OnChainTxTable), hash)
-	if err != nil {
-		return nil, err
-	}
-
-	if tx != nil {
-		if tx.BlockHash != nil && len(tx.BlockHash) > 0 {
-			return tx, nil
-		}
 	}
 	return nil, nil
 }

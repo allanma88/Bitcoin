@@ -13,19 +13,24 @@ import (
 const (
 	DefaultBlocksPerDifficulty = 2016
 	DefaultBlocksPerRewrad     = 210 * 1000
+	DefaultMaxTxSizePerBlock   = 10
 	DefaultBlockInterval       = 60
 	DefaultInitDifficultyLevel = 8
+	DefaultInitReward          = 50
 )
 
 type Config struct {
-	DataDir             string   `yaml:"data_dir,omitempty"`
-	Endpoint            string   `yaml:"endpoint,omitempty"`
-	Bootstraps          []string `yaml:"bootstraps,omitempty"`
-	BlocksPerDifficulty uint64   `yaml:"blocks_per_difficulty,omitempty"`
-	BlocksPerRewrad     uint64   `yaml:"blocks_per_reward,omitempty"`
-	BlockInterval       uint64   `yaml:"block_interval,omitempty"`
-	InitDifficultyLevel uint64   `yaml:"init_difficulty_level,omitempty"`
-	MinerPubkey         []byte   `yaml:"miner_address,omitempty"`
+	Server              string
+	DataDir             string
+	Endpoint            string
+	Bootstraps          []string
+	BlocksPerDifficulty uint64
+	BlocksPerRewrad     uint64
+	MaxTxSizePerBlock   uint16
+	InitRewrad          uint64
+	BlockInterval       uint64
+	InitDifficultyLevel uint64
+	MinerPubkey         []byte
 }
 
 // TODO: need more test cases
@@ -36,11 +41,13 @@ func Read(path string) (*Config, error) {
 	}
 
 	var s struct {
+		Server              string   `yaml:"server,omitempty"`
 		DataDir             string   `yaml:"data_dir,omitempty"`
 		Endpoint            string   `yaml:"endpoint,omitempty"`
 		Bootstraps          []string `yaml:"bootstraps,omitempty"`
 		BlocksPerDifficulty uint64   `yaml:"blocks_per_difficulty,omitempty"`
 		BlocksPerRewrad     uint64   `yaml:"blocks_per_reward,omitempty"`
+		MaxTxSizePerBlock   uint16   `yaml:"max_tx_size_per_block,omitempty"`
 		BlockInterval       uint64   `yaml:"block_interval,omitempty"`
 		InitDifficultyLevel uint64   `yaml:"init_difficulty_level,omitempty"`
 		MinerAddress        string   `yaml:"miner_address,omitempty"`
@@ -60,6 +67,10 @@ func Read(path string) (*Config, error) {
 		return nil, errors.New("the miner address is empty")
 	}
 
+	if strings.Trim(s.Server, "") == "" {
+		s.Server = s.Endpoint
+	}
+
 	var config Config
 	automapper.MapLoose(&s, &config)
 
@@ -69,6 +80,14 @@ func Read(path string) (*Config, error) {
 
 	if config.BlocksPerRewrad == 0 {
 		config.BlocksPerRewrad = DefaultBlocksPerRewrad
+	}
+
+	if config.MaxTxSizePerBlock == 0 {
+		config.MaxTxSizePerBlock = DefaultMaxTxSizePerBlock
+	}
+
+	if config.InitRewrad == 0 {
+		config.InitRewrad = DefaultInitReward
 	}
 
 	if config.BlockInterval == 0 {

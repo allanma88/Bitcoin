@@ -1,11 +1,13 @@
 package model
 
 import (
+	"Bitcoin/src/collection"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/infra"
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/protocol"
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -18,41 +20,48 @@ import (
 )
 
 type Block struct {
-	Number     uint64                           `json:"number,omitempty"`
-	Hash       []byte                           `json:"hash,omitempty"`
-	Prevhash   []byte                           `json:"prevhash,omitempty"`
-	RootHash   []byte                           `json:"roothash,omitempty"`
-	Nonce      uint32                           `json:"nonce,omitempty"`
-	Difficulty float64                          `json:"difficulty,omitempty"`
-	Time       time.Time                        `json:"timestamp,omitempty"`
-	Body       *merkle.MerkleTree[*Transaction] `json:"-"`
+	Hash          []byte
+	Number        uint64
+	Prevhash      []byte
+	RootHash      []byte
+	Nonce         uint32
+	Difficulty    float64
+	Time          time.Time
+	Body          *merkle.MerkleTree[*Transaction]
+	TotalInterval uint64
+	Miner         string
+	PrevBlock     *Block //TODO: waste memory
 }
 
-type prettyBlock struct {
-	Number     uint64    `json:"number,omitempty"`
-	Hash       string    `json:"hash,omitempty"`
-	Prevhash   string    `json:"prevhash,omitempty"`
-	RootHash   string    `json:"roothash,omitempty"`
-	Nonce      uint32    `json:"nonce,omitempty"`
-	Difficulty string    `json:"difficulty,omitempty"`
-	Timestamp  time.Time `json:"timestamp,omitempty"`
+type jBlock struct {
+	Number        uint64    `json:"number,omitempty"`
+	Hash          string    `json:"hash,omitempty"`
+	Prevhash      string    `json:"prevhash,omitempty"`
+	RootHash      string    `json:"roothash,omitempty"`
+	Nonce         uint32    `json:"nonce,omitempty"`
+	Difficulty    string    `json:"difficulty,omitempty"`
+	Timestamp     time.Time `json:"timestamp,omitempty"`
+	TotalInterval uint64
+	Miner         string
 }
 
 func (block *Block) MarshalJSON() ([]byte, error) {
-	var s = prettyBlock{
-		Number:     block.Number,
-		Hash:       hex.EncodeToString(block.Hash),
-		Prevhash:   hex.EncodeToString(block.Prevhash),
-		RootHash:   hex.EncodeToString(block.RootHash),
-		Nonce:      block.Nonce,
-		Difficulty: fmt.Sprintf("%.0f", block.Difficulty),
-		Timestamp:  block.Time,
+	var jblock = jBlock{
+		Number:        block.Number,
+		Hash:          hex.EncodeToString(block.Hash),
+		Prevhash:      hex.EncodeToString(block.Prevhash),
+		RootHash:      hex.EncodeToString(block.RootHash),
+		Nonce:         block.Nonce,
+		Difficulty:    fmt.Sprintf("%.0f", block.Difficulty),
+		Timestamp:     block.Time,
+		TotalInterval: block.TotalInterval,
+		Miner:         block.Miner,
 	}
-	return json.Marshal(s)
+	return json.Marshal(jblock)
 }
 
 func (block *Block) UnmarshalJSON(data []byte) error {
-	var s prettyBlock
+	var s jBlock
 	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
@@ -81,10 +90,22 @@ func (block *Block) UnmarshalJSON(data []byte) error {
 	}
 
 	block.Difficulty = difficulty
-
 	block.Nonce = s.Nonce
 	block.Time = s.Timestamp
+	block.TotalInterval = s.TotalInterval
+	block.Miner = s.Miner
 	return err
+}
+
+func (block *Block) Ancestors(ancestor *Block) []*Block {
+	ancestors := make([]*Block, 0)
+	for ; block != nil; block = block.PrevBlock {
+		if bytes.Equal(ancestor.Hash, block.Hash) {
+			return ancestors
+		}
+		ancestors = append([]*Block{block}, ancestors...)
+	}
+	return nil
 }
 
 func BlockFrom(request *protocol.BlockReq) (*Block, error) {
@@ -143,15 +164,56 @@ func (block *Block) FindHash(ctx context.Context) ([]byte, error) {
 }
 
 func (block *Block) ComputeHash() ([]byte, error) {
-	originalHash := block.Hash
-	block.Hash = []byte{}
+	//TODO: more general way to compute hash, use tag and no need assign the value of each field
+	newblock := &Block{
+		Number:     block.Number,
+		Prevhash:   block.Prevhash,
+		RootHash:   block.RootHash,
+		Nonce:      block.Nonce,
+		Difficulty: block.Difficulty,
+		Time:       block.Time,
+	}
 
-	hash, err := cryptography.Hash(block)
-
-	block.Hash = originalHash
-	return hash, err
+	return cryptography.Hash(newblock)
 }
 
 func (block *Block) GetTxs() []*Transaction {
 	return block.Body.GetVals()
+}
+
+func (block *Block) GetNextDifficulty(blocksPerDifficulty, expectBlockInterval uint64) float64 {
+	difficulty := block.Difficulty
+	if block.Number%blocksPerDifficulty == 0 {
+		avgInterval := block.TotalInterval / (blocksPerDifficulty)
+		difficulty = block.Difficulty * float64((avgInterval / expectBlockInterval))
+	}
+
+	return difficulty
+}
+
+func (block *Block) GetNextReward(initReward, blocksPerRewrad uint64) uint64 {
+	return initReward / (block.Number/blocksPerRewrad + 1)
+}
+
+func (block *Block) GetNextTotalInterval(t time.Time, blocksPerDifficulty uint64) uint64 {
+	if block.Number%blocksPerDifficulty == 0 {
+		return 0
+	} else {
+		return block.TotalInterval + uint64(t.Sub(block.Time).Milliseconds())
+	}
+}
+
+func (block *Block) Compare(other collection.Comparable) int {
+	otherBlock := other.(*Block)
+	if block.Number < otherBlock.Number {
+		return -1
+	} else if block.Number == otherBlock.Number {
+		return 0
+	}
+	return 1
+}
+
+func (block *Block) Equal(other collection.Comparable) bool {
+	otherBlock := other.(*Block)
+	return bytes.Equal(block.Hash, otherBlock.Hash)
 }

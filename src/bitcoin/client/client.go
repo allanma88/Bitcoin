@@ -18,6 +18,7 @@ const (
 type IBitcoinClient interface {
 	SendTx(req *protocol.TransactionReq) (*protocol.TransactionReply, error)
 	SendBlock(req *protocol.BlockReq) (*protocol.BlockReply, error)
+	GetBlocks(req *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error)
 }
 
 type BitcoinClient struct {
@@ -48,7 +49,18 @@ func (cli *BitcoinClient) SendBlock(req *protocol.BlockReq) (*protocol.BlockRepl
 	defer cancel()
 
 	client := protocol.NewBlockClient(cli.conn)
-	return client.AddBlock(ctx, req)
+	return client.NewBlock(ctx, req)
+}
+
+func (cli *BitcoinClient) GetBlocks(req *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
+	ctx, cancel, err := cli.prepare()
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
+	client := protocol.NewBlockClient(cli.conn)
+	return client.GetBlocks(ctx, req)
 }
 
 func (cli *BitcoinClient) prepare() (context.Context, context.CancelFunc, error) {
