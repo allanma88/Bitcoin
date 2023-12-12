@@ -5,13 +5,8 @@ import (
 	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"context"
-	"log"
 	"sync"
 	"time"
-)
-
-const (
-	MaxTxSizePerBlock = 10 //TODO: configurable
 )
 
 type MineService struct {
@@ -33,8 +28,6 @@ func (s *MineService) MineBlock(lastBlock *model.Block, ctx context.Context, wai
 
 	txs, err := s.receiveTxs(reward)
 	if err != nil {
-		//TODO: maybe fatal err?
-		log.Printf("receive txs error: %v", err)
 		return nil, err
 	}
 
@@ -78,9 +71,9 @@ func (s *MineService) mineBlock(lastBlock *model.Block, transactions []*model.Tr
 }
 
 func (s *MineService) receiveTxs(reward uint64) ([]*model.Transaction, error) {
-	txs := make([]*model.Transaction, MaxTxSizePerBlock)
+	txs := make([]*model.Transaction, s.cfg.MaxTxSizePerBlock)
 	var totalFee uint64 = 0
-	for i := 1; i < MaxTxSizePerBlock; i++ {
+	for i := 1; i < int(s.cfg.MaxTxSizePerBlock); i++ {
 		txs[i] = <-s.mineQueue
 		fee, err := s.txService.ValidateOffChainTx(txs[i])
 		if err != nil {

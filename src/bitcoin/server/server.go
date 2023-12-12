@@ -13,10 +13,9 @@ import (
 )
 
 const (
-	TxBroadcastQueueSize    = 10
-	BlockBroadcastQueueSize = 10
-	BlockQueueSize          = 10
-	PullBlockQueueSize      = 10000
+	TxBroadcastQueueSize    = 10000
+	BlockBroadcastQueueSize = 10000
+	PullBlockQueueSize      = 100
 )
 
 type BitcoinServer struct {
@@ -32,7 +31,7 @@ type BitcoinServer struct {
 	mineService         *service.MineService
 	txBroadcastQueue    chan *model.Transaction
 	blockBroadcastQueue chan *model.Block
-	mineQueue           chan *model.Transaction
+	mineQueue           chan *model.Transaction //TODO: remove
 	syncBlockQueue      chan string
 	cancelFunc          context.CancelCauseFunc
 }
@@ -47,7 +46,7 @@ func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb 
 		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
-		mineQueue:           make(chan *model.Transaction, service.MaxTxSizePerBlock),
+		mineQueue:           make(chan *model.Transaction, cfg.MaxTxSizePerBlock),
 		syncBlockQueue:      make(chan string, PullBlockQueueSize),
 		cancelFunc:          cancelFunc,
 	}
@@ -103,10 +102,9 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 	//if the prev block doesn't exist, then maybe we fall behind with current chain or a new main chain show up,
 	// so we need sync with the request node
 	if err == errors.ErrPrevBlockNotFound {
-		//TODO: maybe create many threads here, maybe change to sync send node?
-		go func() {
+		if len(s.syncBlockQueue) < PullBlockQueueSize {
 			s.syncBlockQueue <- request.Node
-		}()
+		}
 	}
 	if err != nil {
 		return &protocol.BlockReply{Result: false}, err
@@ -116,7 +114,6 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 }
 
 func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
-	//TODO: return blocks of the main chain of the current node
 	mainChain := s.chainService.GetMainChain()
 	blocks, end, err := s.blockService.GetBlocks(mainChain, request.Blockhashes)
 	if err != nil {
