@@ -5,7 +5,6 @@ import (
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/infra"
-	"Bitcoin/src/merkle"
 	"Bitcoin/src/protocol"
 	"bytes"
 	"context"
@@ -27,7 +26,7 @@ type Block struct {
 	Nonce         uint32
 	Difficulty    float64
 	Time          time.Time
-	Body          *merkle.MerkleTree[*Transaction]
+	Body          *collection.MerkleTree[*Transaction]
 	TotalInterval uint64
 	Miner         string
 	PrevBlock     *Block //TODO: waste memory
@@ -110,7 +109,7 @@ func (block *Block) Ancestors(ancestor *Block) []*Block {
 
 func BlockFrom(request *protocol.BlockReq) (*Block, error) {
 	var block Block
-	var tree merkle.MerkleTree[*Transaction]
+	var tree collection.MerkleTree[*Transaction]
 
 	err := json.Unmarshal(request.Content, &tree)
 	if err != nil {

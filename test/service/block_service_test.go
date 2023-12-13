@@ -1,9 +1,8 @@
 package service
 
 import (
-	"Bitcoin/src/config"
+	"Bitcoin/src/collection"
 	"Bitcoin/src/database"
-	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"Bitcoin/src/service"
 	"Bitcoin/test"
@@ -15,7 +14,7 @@ func Test_Validate_Succeed(t *testing.T) {
 	block := test.NewBlock(2, 10, prevBlock.Hash)
 	blockdb := newBlockDB()
 	blockContentDB := newBlockContentDB()
-	serv := service.NewBlockService(blockdb, blockContentDB, &config.Config{})
+	serv := service.NewBlockService(blockdb, blockContentDB)
 
 	blockdb.SaveBlock(prevBlock)
 
@@ -36,7 +35,7 @@ func newBlockDB(blocks ...*model.Block) database.IBlockDB {
 }
 
 func newBlockContentDB() database.IBlockContentDB {
-	basedb := newTestBaseDB[merkle.MerkleTree[*model.Transaction]]()
+	basedb := newTestBaseDB[collection.MerkleTree[*model.Transaction]]()
 	blockContentDB := &database.BlockContentDB{IBaseDB: basedb}
 	return blockContentDB
 }

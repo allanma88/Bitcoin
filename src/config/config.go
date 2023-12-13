@@ -14,6 +14,7 @@ const (
 	DefaultBlocksPerDifficulty = 2016
 	DefaultBlocksPerRewrad     = 210 * 1000
 	DefaultMaxTxSizePerBlock   = 10
+	DefaultMaxTxSizeOfMempool  = 1000
 	DefaultBlockInterval       = 60
 	DefaultInitDifficultyLevel = 8
 	DefaultInitReward          = 50
@@ -27,6 +28,7 @@ type Config struct {
 	BlocksPerDifficulty uint64
 	BlocksPerRewrad     uint64
 	MaxTxSizePerBlock   uint16
+	MaxTxSizeOfMemPool  uint32
 	InitRewrad          uint64
 	BlockInterval       uint64
 	InitDifficultyLevel uint64
@@ -48,6 +50,7 @@ func Read(path string) (*Config, error) {
 		BlocksPerDifficulty uint64   `yaml:"blocks_per_difficulty,omitempty"`
 		BlocksPerRewrad     uint64   `yaml:"blocks_per_reward,omitempty"`
 		MaxTxSizePerBlock   uint16   `yaml:"max_tx_size_per_block,omitempty"`
+		MaxTxSizeOfMemPool  uint32   `yaml:"max_tx_size_of_mempool,omitempty"`
 		BlockInterval       uint64   `yaml:"block_interval,omitempty"`
 		InitDifficultyLevel uint64   `yaml:"init_difficulty_level,omitempty"`
 		MinerAddress        string   `yaml:"miner_address,omitempty"`
@@ -84,6 +87,10 @@ func Read(path string) (*Config, error) {
 
 	if config.MaxTxSizePerBlock == 0 {
 		config.MaxTxSizePerBlock = DefaultMaxTxSizePerBlock
+	}
+
+	if config.MaxTxSizePerBlock == 0 {
+		config.MaxTxSizeOfMemPool = DefaultMaxTxSizeOfMempool
 	}
 
 	if config.InitRewrad == 0 {

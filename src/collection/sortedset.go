@@ -44,6 +44,13 @@ func NewSortedSet[T Comparable]() *SortedSet[T] {
 	}
 }
 
+func (set *SortedSet[T]) Min() T {
+	if set.length > 0 {
+		return set.header.levels[0].forward.val
+	}
+	return *new(T)
+}
+
 func (set *SortedSet[T]) Max() T {
 	if set.length > 0 {
 		return set.tail.val

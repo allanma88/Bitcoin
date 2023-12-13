@@ -9,7 +9,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
-func Test_TransactionDB_Get(t *testing.T) {
+func Test_BlockContentDB_Get(t *testing.T) {
 	db, err := leveldb.OpenFile(DBPath, nil)
 	if err != nil {
 		t.Fatalf("open %s error: %v", DBPath, err)
@@ -18,13 +18,13 @@ func Test_TransactionDB_Get(t *testing.T) {
 	defer cleanUp(db, DBPath)
 
 	tx := test.NewTransaction([]byte{})
-	txdb := database.NewTransactionDB(db)
-	err = txdb.SaveOffChainTx(tx)
+	blockContentDb := database.NewBlockContentDB(db)
+	err = blockContentDb.SaveTx(tx)
 	if err != nil {
 		t.Fatalf("save transaction error: %v", err)
 	}
 
-	newTx, err := txdb.GetTx(tx.Hash)
+	newTx, err := blockContentDb.GetTx(tx.Hash)
 	if err != nil {
 		t.Fatalf("get transaction error: %v", err)
 	}

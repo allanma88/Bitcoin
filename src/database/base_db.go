@@ -11,7 +11,6 @@ import (
 type IBaseDB[T any] interface {
 	Save(prefix, key []byte, val *T) error
 	Get(prefix, key []byte) (*T, error)
-	Move(oldPrefix, newPrefix, key []byte, val *T) error
 	Close() error
 }
 
@@ -49,36 +48,6 @@ func (db *BaseDB[T]) Get(prefix, key []byte) (*T, error) {
 		return nil, err
 	}
 	return &val, nil
-}
-
-// TODO: test case
-func (db *BaseDB[T]) Move(oldPrefix, newPrefix, key []byte, val *T) error {
-	data, err := json.Marshal(val)
-	if err != nil {
-		return err
-	}
-
-	tx, err := db.Database.OpenTransaction()
-	if err != nil {
-		return err
-	}
-
-	opt := &opt.WriteOptions{}
-	oldK := makeKey(oldPrefix, key)
-	err = tx.Delete(oldK, opt)
-	if err != nil {
-		tx.Discard()
-		return err
-	}
-
-	newK := makeKey(newPrefix, key)
-	err = tx.Put(newK, data, opt)
-	if err != nil {
-		tx.Discard()
-		return err
-	}
-
-	return tx.Commit()
 }
 
 func (db *BaseDB[T]) Close() error {

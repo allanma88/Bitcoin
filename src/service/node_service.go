@@ -2,7 +2,6 @@ package service
 
 import (
 	"Bitcoin/src/bitcoin/client"
-	"Bitcoin/src/config"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"fmt"
@@ -13,28 +12,27 @@ import (
 )
 
 const (
-	//node
 	MaxBroadcastNodes = 10
 )
 
 //TODO: maybe we can use more complex policy to remove inactive nodes
 
 type NodeService struct {
-	lock  sync.RWMutex
-	nodes map[string]*model.Node
-	cfg   *config.Config
+	lock     sync.RWMutex
+	nodes    map[string]*model.Node
+	endpoint string
 }
 
 type sendFunc[Q, R any] func(cli client.IBitcoinClient, req Q) (R, error)
 
-func NewNodeService(cfg *config.Config) *NodeService {
+func NewNodeService(endpoint string, bootstraps []string) *NodeService {
 	service := &NodeService{
-		lock:  sync.RWMutex{},
-		nodes: make(map[string]*model.Node),
-		cfg:   cfg,
+		lock:     sync.RWMutex{},
+		nodes:    make(map[string]*model.Node),
+		endpoint: endpoint,
 	}
-	if cfg.Bootstraps != nil {
-		for _, addr := range cfg.Bootstraps {
+	if bootstraps != nil {
+		for _, addr := range bootstraps {
 			service.nodes[addr] = &model.Node{Addr: addr}
 		}
 	}
@@ -151,7 +149,7 @@ func (service *NodeService) RandomPickAddrs(n int) []string {
 
 	indics := rand.Perm(n)
 	selects := make([]string, 1, n+1)
-	selects[0] = service.cfg.Endpoint
+	selects[0] = service.endpoint
 	for i := 0; i < n; i++ {
 		selects = append(selects, addrs[indics[i]])
 	}

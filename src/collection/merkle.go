@@ -1,4 +1,4 @@
-package merkle
+package collection
 
 import (
 	"Bitcoin/src/cryptography"

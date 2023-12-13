@@ -1,8 +1,10 @@
 package model
 
 import (
+	"Bitcoin/src/collection"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/protocol"
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -101,6 +103,7 @@ type Transaction struct {
 	Outs      []*Out
 	Timestamp time.Time
 	BlockHash []byte
+	Fee       uint64
 }
 
 type jTransaction struct {
@@ -212,4 +215,19 @@ func MakeCoinbaseTx(pubkey []byte, val uint64) (*Transaction, error) {
 
 	tx.Hash = hash
 	return tx, nil
+}
+
+func (tx *Transaction) Compare(other collection.Comparable) int {
+	otherTx := other.(*Transaction)
+	if tx.Fee < otherTx.Fee {
+		return -1
+	} else if tx.Fee == otherTx.Fee {
+		return 0
+	}
+	return 1
+}
+
+func (tx *Transaction) Equal(other collection.Comparable) bool {
+	otherTx := other.(*Transaction)
+	return bytes.Equal(tx.Hash, otherTx.Hash)
 }

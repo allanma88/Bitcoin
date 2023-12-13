@@ -32,13 +32,12 @@ func main() {
 		log.Fatalf("failed to open db: %v", err)
 	}
 
-	txdb := database.NewTransactionDB(db)
 	blockdb := database.NewBlockDB(db)
 	blockContentDb := database.NewBlockContentDB(db)
 
 	ctx, cancelFunc := context.WithCancelCause(context.Background())
 
-	server, err := server.NewBitcoinServer(cfg, txdb, blockdb, blockContentDb, cancelFunc)
+	server, err := server.NewBitcoinServer(cfg, blockdb, blockContentDb, cancelFunc)
 	if err != nil {
 		log.Fatalf("failed to create server: %v", err)
 	}

@@ -29,29 +29,29 @@ type BitcoinServer struct {
 	blockService        *service.BlockService
 	syncService         *service.SyncService
 	mineService         *service.MineService
+	mempool             *service.MemPool
 	txBroadcastQueue    chan *model.Transaction
 	blockBroadcastQueue chan *model.Block
-	mineQueue           chan *model.Transaction //TODO: remove
 	syncBlockQueue      chan string
 	cancelFunc          context.CancelCauseFunc
 }
 
-func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
+func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
 	server := &BitcoinServer{
 		cfg:                 cfg,
-		nodeService:         service.NewNodeService(cfg),
+		nodeService:         service.NewNodeService(cfg.Endpoint, cfg.Bootstraps),
 		utxoService:         service.NewUtxoService(),
 		chainService:        service.NewChainService(), //TODO: how to set when server restart?
-		txService:           service.NewTransactionService(txdb),
-		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
+		txService:           service.NewTransactionService(blockContentDb),
+		blockService:        service.NewBlockService(blockdb, blockContentDb),
+		mempool:             service.NewMemPool(int(cfg.MaxTxSizePerBlock)),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
-		mineQueue:           make(chan *model.Transaction, cfg.MaxTxSizePerBlock),
 		syncBlockQueue:      make(chan string, PullBlockQueueSize),
 		cancelFunc:          cancelFunc,
 	}
 	server.syncService = service.NewSyncService(server.chainService, server.nodeService, server.addBlock)
-	server.mineService = service.NewMineService(cfg, server.txService, server.mineQueue)
+	server.mineService = service.NewMineService(cfg, server.txService, server.mempool)
 
 	return server, nil
 }
@@ -60,29 +60,24 @@ func (s *BitcoinServer) AddTx(ctx context.Context, request *protocol.Transaction
 	tx := model.TransactionFrom(request)
 
 	log.Printf("received transaction: %x", tx.Hash)
+	f := func(hash []byte) *model.Transaction {
+		return s.mempool.Get(hash)
+	}
 
-	_, err := s.txService.ValidateOffChainTx(tx)
-	if err != nil {
+	if err := s.txService.ValidateTx(tx, f); err != nil {
 		log.Printf("validate transaction %x failed: %v", tx.Hash, err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
 	log.Printf("validated transaction: %x", tx.Hash)
 
-	err = s.txService.SaveOffChainTx(tx)
-	if err != nil {
-		log.Printf("save transaction %x failed: %v", tx.Hash, err)
-		return &protocol.TransactionReply{Result: false}, err
-	}
-	log.Printf("saved transaction: %x", tx.Hash)
+	s.mempool.Put(tx)
+	log.Printf("puted transaction on mempool: %x", tx.Hash)
 
-	go func() {
-		s.txBroadcastQueue <- tx
-		s.mineQueue <- tx
-	}()
+	s.txBroadcastQueue <- tx
+
 	log.Printf("broadcast the transaction: %x", tx.Hash)
 
-	err = s.nodeService.AddAddrs(request.Nodes)
-	if err != nil {
+	if err := s.nodeService.AddAddrs(request.Nodes); err != nil {
 		log.Printf("add nodes failed: %v", err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
@@ -188,16 +183,18 @@ func (s *BitcoinServer) addBlock(block *model.Block) error {
 		return err
 	}
 
-	if err = s.applyBlock(block); err != nil {
-		log.Printf("apply block %x failed: %v", block.Hash, err)
-		return err
-	}
-
 	if err = s.blockService.SaveBlock(block); err != nil {
 		log.Printf("save block %x failed: %v", block.Hash, err)
 		return err
 	}
 	log.Printf("saved block: %x", block.Hash)
+
+	if err = s.applyBlock(block); err != nil {
+		log.Printf("apply block %x failed: %v", block.Hash, err)
+		return err
+	}
+
+	s.mempool.Remove(block.GetTxs())
 
 	s.blockBroadcastQueue <- block
 

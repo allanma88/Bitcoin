@@ -8,6 +8,7 @@ import (
 )
 
 //TODO: test cases
+//TODO: remove too old branches
 
 type ChainService struct {
 	chains *collection.SortedSet[*model.Block]

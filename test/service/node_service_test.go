@@ -2,7 +2,6 @@ package service
 
 import (
 	"Bitcoin/src/bitcoin/client"
-	"Bitcoin/src/config"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"Bitcoin/src/service"
@@ -20,14 +19,12 @@ func Test_SendTx_Check_Nodes(t *testing.T) {
 	nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 
 	tx := test.NewTransaction([]byte{})
-	cfg := &config.Config{
-		Endpoint: "localhost:5000",
-	}
-	serv := service.NewNodeService(cfg)
+	endpoint := "localhost:5000"
+	serv := service.NewNodeService(endpoint, nil)
 	serv.AddNodes(nodes...)
 	serv.SendTx(tx)
 
-	n, err := checkNodes(channels, cfg.Endpoint)
+	n, err := checkNodes(channels, endpoint)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -50,10 +47,8 @@ func Test_SendTx_Not_Remove_Failed_Not_Enough_Nodes(t *testing.T) {
 		nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 		failNodes := generateNodes(2, 6001, channels, makeFailedClient)
 
-		cfg := &config.Config{
-			Endpoint: "localhost:5000",
-		}
-		serv := service.NewNodeService(cfg)
+		endpoint := "localhost:5000"
+		serv := service.NewNodeService(endpoint, nil)
 		serv.AddNodes(nodes...)
 		serv.AddNodes(failNodes...)
 
@@ -61,7 +56,7 @@ func Test_SendTx_Not_Remove_Failed_Not_Enough_Nodes(t *testing.T) {
 		for i := 0; i < sendCount; i++ {
 			serv.SendTx(tx)
 
-			n, err := checkNodes(channels, cfg.Endpoint)
+			n, err := checkNodes(channels, endpoint)
 			if err != nil {
 				t.Fatal(err.Error())
 			}
@@ -93,10 +88,8 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 		nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 		failNodes := generateNodes(2, 6001, channels, makeFailedClient)
 
-		cfg := &config.Config{
-			Endpoint: "localhost:5000",
-		}
-		serv := service.NewNodeService(cfg)
+		endpoint := "localhost:5000"
+		serv := service.NewNodeService(endpoint, nil)
 		serv.AddNodes(nodes...)
 		serv.AddNodes(failNodes...)
 
@@ -104,7 +97,7 @@ func Test_SendTx_Remove_Failed_Enough_Nodes(t *testing.T) {
 		for i := 0; i < sendCount; i++ {
 			serv.SendTx(tx)
 
-			n, err := checkNodes(channels, cfg.Endpoint)
+			n, err := checkNodes(channels, endpoint)
 			if err != nil {
 				t.Fatal(err.Error())
 			}
@@ -140,10 +133,8 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 	nodes := generateNodes(service.MaxBroadcastNodes+5, 5001, channels, makeclient)
 	probablyFailNodes := generateNodes(2, 6001, channels, makeProbablyFailedClient)
 
-	cfg := &config.Config{
-		Endpoint: "localhost:5000",
-	}
-	serv := service.NewNodeService(cfg)
+	endpoint := "localhost:5000"
+	serv := service.NewNodeService(endpoint, nil)
 	serv.AddNodes(nodes...)
 	serv.AddNodes(probablyFailNodes...)
 
@@ -151,7 +142,7 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 	for i := 0; i < model.MaxFailedCount*2; i++ {
 		serv.SendTx(tx)
 
-		_, err := checkNodes(channels, cfg.Endpoint)
+		_, err := checkNodes(channels, endpoint)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
@@ -166,10 +157,8 @@ func Test_SendTx_Not_Remove_Rarely_Failed_Nodes(t *testing.T) {
 }
 
 func Test_RandomPick(t *testing.T) {
-	cfg := &config.Config{
-		Endpoint: "localhost:5000",
-	}
-	serv := service.NewNodeService(cfg)
+	endpoint := "localhost:5000"
+	serv := service.NewNodeService(endpoint, nil)
 	for i := 0; i < service.MaxBroadcastNodes+5; i++ {
 		serv.AddNodes(&model.Node{Addr: fmt.Sprintf("localhost:%d", 5000+i+1)})
 	}
@@ -179,8 +168,8 @@ func Test_RandomPick(t *testing.T) {
 		t.Fatalf("expect pick %v nodes, actual: %v", service.MaxBroadcastNodes+1, len(addrs))
 	}
 
-	if addrs[0] != cfg.Endpoint {
-		t.Fatalf("the first expect node: %v, actual: %v", cfg.Endpoint, addrs[0])
+	if addrs[0] != endpoint {
+		t.Fatalf("the first expect node: %v, actual: %v", endpoint, addrs[0])
 	}
 
 	addrMap := make(map[string]string)
@@ -194,7 +183,7 @@ func Test_RandomPick(t *testing.T) {
 }
 
 func Test_Add_Addrs(t *testing.T) {
-	serv := service.NewNodeService(&config.Config{})
+	serv := service.NewNodeService("localhost:5000", nil)
 
 	addrs := make([]string, 5)
 	for i := 0; i < len(addrs); i++ {
@@ -215,7 +204,7 @@ func Test_Add_Addrs(t *testing.T) {
 }
 
 func Test_Add_Invalid_Addrs(t *testing.T) {
-	serv := service.NewNodeService(&config.Config{})
+	serv := service.NewNodeService("localhost:5000", nil)
 
 	addrs := make([]string, 5)
 	for i := 0; i < len(addrs); i++ {

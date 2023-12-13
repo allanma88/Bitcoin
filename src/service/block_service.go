@@ -1,11 +1,10 @@
 package service
 
 import (
-	"Bitcoin/src/config"
+	"Bitcoin/src/collection"
 	"Bitcoin/src/database"
 	"Bitcoin/src/errors"
 	"Bitcoin/src/infra"
-	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"bytes"
 	"log"
@@ -20,20 +19,18 @@ const (
 type BlockService struct {
 	blockDB        database.IBlockDB
 	blockContentDB database.IBlockContentDB
-	cfg            *config.Config
 }
 
-func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockContentDB, cfg *config.Config) *BlockService {
+func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockContentDB) *BlockService {
 	return &BlockService{
 		blockDB:        blockDB,
 		blockContentDB: blockContentDB,
-		cfg:            cfg,
 	}
 }
 
 func (service *BlockService) GetBlocks(mainChain *model.Block, blockhashes [][]byte) ([]*model.Block, uint64, error) {
 	for _, blockHash := range blockhashes {
-		block, err := service.blockDB.GetBlock(blockHash)
+		block, err := service.getBlock(blockHash)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -58,6 +55,20 @@ func (service *BlockService) SaveBlock(block *model.Block) error {
 	}
 
 	return service.blockContentDB.SaveBlockContent(block.RootHash, block.Body)
+}
+
+func (service *BlockService) getBlock(blockHash []byte) (*model.Block, error) {
+	block, err := service.blockDB.GetBlock(blockHash)
+	if err != nil {
+		return nil, err
+	}
+
+	content, err := service.blockContentDB.GetBlockContent(blockHash)
+	if err != nil {
+		return nil, err
+	}
+	block.Body = content
+	return block, nil
 }
 
 func (service *BlockService) Validate(block *model.Block) error {
@@ -112,7 +123,7 @@ func validateDifficulty(hash []byte, difficulty float64) error {
 	return nil
 }
 
-func validateRootHash(roothash []byte, tree *merkle.MerkleTree[*model.Transaction]) error {
+func validateRootHash(roothash []byte, tree *collection.MerkleTree[*model.Transaction]) error {
 	valid, err := tree.Validate()
 	if err != nil {
 		return err
