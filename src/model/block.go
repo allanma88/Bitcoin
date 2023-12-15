@@ -6,7 +6,6 @@ import (
 	"Bitcoin/src/errors"
 	"Bitcoin/src/infra"
 	"Bitcoin/src/protocol"
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -29,7 +28,6 @@ type Block struct {
 	Body          *collection.MerkleTree[*Transaction]
 	TotalInterval uint64
 	Miner         string
-	PrevBlock     *Block //TODO: waste memory
 }
 
 type jBlock struct {
@@ -94,17 +92,6 @@ func (block *Block) UnmarshalJSON(data []byte) error {
 	block.TotalInterval = s.TotalInterval
 	block.Miner = s.Miner
 	return err
-}
-
-func (block *Block) Ancestors(ancestor *Block) []*Block {
-	ancestors := make([]*Block, 0)
-	for ; block != nil; block = block.PrevBlock {
-		if bytes.Equal(ancestor.Hash, block.Hash) {
-			return ancestors
-		}
-		ancestors = append([]*Block{block}, ancestors...)
-	}
-	return nil
 }
 
 func BlockFrom(request *protocol.BlockReq) (*Block, error) {
@@ -200,19 +187,4 @@ func (block *Block) GetNextTotalInterval(t time.Time, blocksPerDifficulty uint64
 	} else {
 		return block.TotalInterval + uint64(t.Sub(block.Time).Milliseconds())
 	}
-}
-
-func (block *Block) Compare(other collection.Comparable) int {
-	otherBlock := other.(*Block)
-	if block.Number < otherBlock.Number {
-		return -1
-	} else if block.Number == otherBlock.Number {
-		return 0
-	}
-	return 1
-}
-
-func (block *Block) Equal(other collection.Comparable) bool {
-	otherBlock := other.(*Block)
-	return bytes.Equal(block.Hash, otherBlock.Hash)
 }

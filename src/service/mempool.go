@@ -14,29 +14,25 @@ const (
 
 type MemPool struct {
 	maxTxSize int
-	mempool   *collection.SortedSet[*model.Transaction]
-	txmap     map[string]*model.Transaction
+	mempool   *collection.SortedSet[string, uint64, *model.Transaction]
 }
 
 func NewMemPool(maxTxSize int) *MemPool {
 	return &MemPool{
 		maxTxSize: maxTxSize,
-		mempool:   collection.NewSortedSet[*model.Transaction](),
-		txmap:     make(map[string]*model.Transaction),
+		mempool:   collection.NewSortedSet[string, uint64, *model.Transaction](),
 	}
 }
 
 func (pool *MemPool) Get(hash []byte) *model.Transaction {
-	return pool.txmap[string(hash)]
+	return pool.mempool.Get1(string(hash))
 }
 
 func (pool *MemPool) Put(tx *model.Transaction) {
-	pool.mempool.Insert(tx)
-	pool.txmap[string(tx.Hash)] = tx
+	pool.mempool.Insert(string(tx.Hash), tx.Fee, tx)
 	if pool.mempool.Len() > pool.maxTxSize {
 		min := pool.mempool.Min()
-		pool.mempool.Remove(min)
-		delete(pool.txmap, string(min.Hash))
+		pool.mempool.Remove(string(min.Hash), min.Fee)
 	}
 }
 
@@ -46,8 +42,7 @@ func (pool *MemPool) TopMax(n int) []*model.Transaction {
 
 func (pool *MemPool) Remove(txs []*model.Transaction) {
 	for _, tx := range txs {
-		pool.mempool.Remove(tx)
-		delete(pool.txmap, string(tx.Hash))
+		pool.mempool.Remove(string(tx.Hash), tx.Fee)
 	}
 }
 

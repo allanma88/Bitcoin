@@ -43,7 +43,7 @@ func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB, cancelFunc 
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg.Endpoint, cfg.Bootstraps),
 		utxoService:         service.NewUtxoService(),
-		chainService:        service.NewChainService(), //TODO: how to set when server restart?
+		chainService:        service.NewChainService(),
 		txService:           service.NewTransactionService(blockdb),
 		blockService:        service.NewBlockService(blockdb),
 		mempool:             service.NewMemPool(int(cfg.MaxTxSizePerBlock)),
@@ -116,8 +116,8 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 
 func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
 	mainChain := s.chainService.GetMainChain()
-	blocks, end, err := s.blockService.GetBlocks(mainChain, request.Blockhashes)
-	if err != nil {
+	blocks, end, err := s.blockService.GetBlocks(mainChain.LastBlockHash, request.Blockhashes)
+	if blocks == nil || err != nil {
 		return &protocol.GetBlocksReply{}, err
 	}
 
@@ -173,7 +173,13 @@ func (s *BitcoinServer) SyncBlocks(wait *sync.WaitGroup) {
 
 func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
 	for !s.exiting {
-		lastBlock := s.chainService.GetMainChain()
+		mainChain := s.chainService.GetMainChain()
+		lastBlock, err := s.blockService.GetBlock(mainChain.LastBlockHash, false)
+		if err != nil {
+			log.Printf("get last block of main chain error: %v", err)
+			continue
+		}
+
 		block, err := s.mineService.MineBlock(lastBlock, ctx, wait)
 		if err != nil {
 			log.Printf("mine block error: %v", err)
@@ -251,9 +257,13 @@ func (s *BitcoinServer) addBlock(block *model.Block) error {
 }
 
 func (s *BitcoinServer) applyBlock(block *model.Block) error {
-	applyBlocks, rollbackBlocks := s.chainService.SetChain(block)
+	applyChain, rollbackChain := s.chainService.SetChain(block)
 
-	if applyBlocks != nil && rollbackBlocks != nil {
+	if applyChain != nil && rollbackChain != nil {
+		applyBlocks, rollbackBlocks, err := s.blockService.GetBlocksOfChain(applyChain, rollbackChain)
+		if err != nil {
+			return err
+		}
 		if err := s.utxoService.SwitchBalances(rollbackBlocks, applyBlocks); err != nil {
 			return err
 		}

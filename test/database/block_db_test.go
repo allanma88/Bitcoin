@@ -25,7 +25,7 @@ func Test_BlockDB_Get(t *testing.T) {
 		t.Fatalf("save block error: %s", err)
 	}
 
-	newBlock, err := blockdb.GetBlock(block.Hash)
+	newBlock, err := blockdb.GetBlock(block.Hash, false)
 	if err != nil {
 		t.Fatalf("get block error: %s", err)
 	}

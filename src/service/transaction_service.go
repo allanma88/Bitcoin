@@ -152,7 +152,7 @@ func (service *TransactionService) validateInput(input *model.In, tx *model.Tran
 		return 0, errors.ErrInTooLate
 	}
 
-	input.PrevOut = prevTx.Outs[input.Index]
+	input.PrevOut = prevTx.Outs[input.Index].DeepClone()
 
 	valid, err := cryptography.Verify(input.PrevOut.Pubkey, prevTx.Hash, input.Signature)
 	if !valid || err != nil {

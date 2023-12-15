@@ -1,10 +1,8 @@
 package model
 
 import (
-	"Bitcoin/src/collection"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/protocol"
-	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -15,7 +13,7 @@ import (
 
 type In struct {
 	PrevHash  []byte
-	PrevOut   *Out //TODO: waste memory
+	PrevOut   *Out
 	Index     uint32
 	Signature []byte
 }
@@ -93,6 +91,10 @@ func (out *Out) UnmarshalJSON(data []byte) error {
 
 	out.Value = s.Value
 	return err
+}
+
+func (out *Out) DeepClone() *Out {
+	return &Out{Pubkey: []byte(out.Pubkey), Value: out.Value}
 }
 
 type Transaction struct {
@@ -215,19 +217,4 @@ func MakeCoinbaseTx(pubkey []byte, val uint64) (*Transaction, error) {
 
 	tx.Hash = hash
 	return tx, nil
-}
-
-func (tx *Transaction) Compare(other collection.Comparable) int {
-	otherTx := other.(*Transaction)
-	if tx.Fee < otherTx.Fee {
-		return -1
-	} else if tx.Fee == otherTx.Fee {
-		return 0
-	}
-	return 1
-}
-
-func (tx *Transaction) Equal(other collection.Comparable) bool {
-	otherTx := other.(*Transaction)
-	return bytes.Equal(tx.Hash, otherTx.Hash)
 }

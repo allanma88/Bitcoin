@@ -27,19 +27,17 @@ func NewBlockService(blockDB database.IBlockDB) *BlockService {
 	}
 }
 
-func (service *BlockService) GetBlocks(mainChain *model.Block, blockhashes [][]byte) ([]*model.Block, uint64, error) {
+func (service *BlockService) GetBlocks(lastBlockHash []byte, blockhashes [][]byte) ([]*model.Block, uint64, error) {
 	for _, blockHash := range blockhashes {
-		block, err := service.GetBlock(blockHash)
+		ancestors, err := service.Ancestors(lastBlockHash, blockHash)
 		if err != nil {
 			return nil, 0, err
 		}
-		ancestors := mainChain.Ancestors(block)
+
 		if ancestors != nil {
 			var end uint64
 			if len(ancestors) > 0 {
 				end = ancestors[len(ancestors)-1].Number
-			} else {
-				end = block.Number
 			}
 			return ancestors[:MaxBlocksPerGetBlockReq], end, nil
 		}
@@ -47,9 +45,20 @@ func (service *BlockService) GetBlocks(mainChain *model.Block, blockhashes [][]b
 	return nil, 0, nil
 }
 
-// func (service *BlockService) SaveBlock(block *model.Block) error {
-// 	return service.SaveBlock(block)
-// }
+// TODO: make internal
+func (service *BlockService) Ancestors(lastBlockHash, ancestor []byte) ([]*model.Block, error) {
+	ancestors := make([]*model.Block, 0)
+	for !bytes.Equal(ancestor, lastBlockHash) {
+		//TODO: split the GetBlock api to GetBlockHeader and GetBlockContent, not include body here
+		block, err := service.GetBlock(lastBlockHash, true)
+		if err != nil {
+			return nil, err
+		}
+		ancestors = append([]*model.Block{block}, ancestors...)
+		lastBlockHash = block.Prevhash
+	}
+	return nil, nil
+}
 
 func (service *BlockService) LoadBlocks(utxo *UtxoService) error {
 	for {
@@ -79,7 +88,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return err
 	}
 
-	existBlock, err := service.GetBlock(hash)
+	existBlock, err := service.GetBlock(hash, false)
 	if err != nil {
 		return err
 	}
@@ -87,7 +96,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return errors.ErrBlockExist
 	}
 
-	prevBlock, err := service.GetBlock(block.Prevhash)
+	prevBlock, err := service.GetBlock(block.Prevhash, false)
 	if err != nil {
 		return err
 	}
@@ -100,7 +109,6 @@ func (service *BlockService) Validate(block *model.Block) error {
 	if prevBlock.Time.Compare(block.Time) > 0 {
 		return errors.ErrBlockTooLate
 	}
-	block.PrevBlock = prevBlock
 
 	err = validateDifficulty(block.Hash, block.Difficulty)
 	if err != nil {
@@ -113,6 +121,35 @@ func (service *BlockService) Validate(block *model.Block) error {
 	}
 
 	return nil
+}
+
+func (service *BlockService) GetBlocksOfChain(applyChain, rollbackChain *model.Chain) ([]*model.Block, []*model.Block, error) {
+	applyBlocks := make([]*model.Block, 0)
+	rollbackBlocks := make([]*model.Block, 0)
+
+	applyBlock, err := service.GetBlock(applyChain.LastBlockHash, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	rollbackBlock, err := service.GetBlock(rollbackChain.LastBlockHash, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for !bytes.Equal(rollbackBlock.Hash, applyBlock.Hash) {
+		rollbackBlocks = append(rollbackBlocks, rollbackBlock)
+		applyBlocks = append(applyBlocks, applyBlock)
+
+		applyBlock, err = service.GetBlock(applyBlock.Prevhash, true)
+		if err != nil {
+			return nil, nil, err
+		}
+		rollbackBlock, err = service.GetBlock(rollbackBlock.Prevhash, true)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return applyBlocks, rollbackBlocks, nil
 }
 
 func validateDifficulty(hash []byte, difficulty float64) error {

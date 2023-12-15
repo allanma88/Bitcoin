@@ -18,7 +18,7 @@ const (
 
 type IBlockDB interface {
 	SaveBlock(block *model.Block) error
-	GetBlock(hash []byte) (*model.Block, error)
+	GetBlock(hash []byte, includeBody bool) (*model.Block, error)
 	FilterBlock(timestamp time.Time, n int) ([]*model.Block, error)
 	SaveTx(tx *model.Transaction) error
 	GetTx(hash []byte) (*model.Transaction, error)
@@ -59,29 +59,31 @@ func (db *BlockDB) SaveBlock(block *model.Block) error {
 	return db.EndBatch(batch)
 }
 
-func (db *BlockDB) GetBlock(hash []byte) (*model.Block, error) {
+func (db *BlockDB) GetBlock(hash []byte, includeBody bool) (*model.Block, error) {
 	var block model.Block
 	has, err := db.Get([]byte(BlockTable), hash, &block)
 	if !has || err != nil {
 		return nil, err
 	}
 
-	var content collection.MerkleTree[*model.Transaction]
-	has, err = db.Get([]byte(BlockContentTable), block.RootHash, &content)
-	if !has || err != nil {
-		return nil, err
-	}
-
-	for i := 0; i < len(content.Table[0]); i++ {
-		txhash := content.Table[0][i].Hash
-
-		tx, err := db.GetTx(txhash)
-		if err != nil {
+	if includeBody {
+		var content collection.MerkleTree[*model.Transaction]
+		has, err = db.Get([]byte(BlockContentTable), block.RootHash, &content)
+		if !has || err != nil {
 			return nil, err
 		}
-		content.Table[0][i].Val = tx
+
+		for i := 0; i < len(content.Table[0]); i++ {
+			txhash := content.Table[0][i].Hash
+
+			tx, err := db.GetTx(txhash)
+			if err != nil {
+				return nil, err
+			}
+			content.Table[0][i].Val = tx
+		}
+		block.Body = &content
 	}
-	block.Body = &content
 
 	return &block, nil
 }

@@ -3,7 +3,6 @@ package service
 import (
 	"Bitcoin/src/collection"
 	"Bitcoin/src/model"
-	"bytes"
 	"sync"
 )
 
@@ -11,18 +10,18 @@ import (
 //TODO: remove too old branches
 
 type ChainService struct {
-	chains *collection.SortedSet[*model.Block]
+	chains *collection.SortedSet[string, uint64, *model.Chain]
 	lock   sync.Mutex
 }
 
 func NewChainService() *ChainService {
 	return &ChainService{
-		chains: collection.NewSortedSet[*model.Block](),
+		chains: collection.NewSortedSet[string, uint64, *model.Chain](),
 		lock:   sync.Mutex{},
 	}
 }
 
-func (s *ChainService) GetMainChain() *model.Block {
+func (s *ChainService) GetMainChain() *model.Chain {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -36,32 +35,22 @@ func (s *ChainService) GetChainHashes(m, n int) [][]byte {
 	blocks := s.chains.TopMax(m, n)
 	blockHashes := make([][]byte, len(blocks))
 	for i := 0; i < len(blocks); i++ {
-		blockHashes[i] = blocks[i].Hash
+		blockHashes[i] = blocks[i].LastBlockHash
 	}
 	return blockHashes
 }
 
-func (s *ChainService) SetChain(block *model.Block) ([]*model.Block, []*model.Block) {
+func (s *ChainService) SetChain(block *model.Block) (*model.Chain, *model.Chain) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	lastBlock := s.chains.Max()
+	chain := s.chains.Get(string(block.Prevhash), block.Number-1)
+	chain.LastBlockHash = block.Hash
+	chain.Length = block.Number
 
-	s.chains.Remove(block.PrevBlock)
-	s.chains.Insert(block)
-
-	applyBlocks := make([]*model.Block, 0)
-	rollbackBlocks := make([]*model.Block, 0)
-
-	if !bytes.Equal(lastBlock.Hash, block.Prevhash) {
-		for !bytes.Equal(lastBlock.Hash, block.Hash) {
-			rollbackBlocks = append(rollbackBlocks, lastBlock)
-			applyBlocks = append(applyBlocks, block)
-
-			block = block.PrevBlock
-			lastBlock = lastBlock.PrevBlock
-		}
-		return applyBlocks, rollbackBlocks
+	mainChain := s.chains.Max()
+	if mainChain != chain {
+		return chain, mainChain
 	}
 
 	return nil, nil

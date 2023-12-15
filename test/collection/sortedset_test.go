@@ -6,10 +6,10 @@ import (
 )
 
 func Test_Insert_Max(t *testing.T) {
-	sortedset := collection.NewSortedSet[*Entity]()
+	sortedset := collection.NewSortedSet[int, int, *Entity]()
 	n := 10
 	for i := 0; i < n; i++ {
-		sortedset.Insert(&Entity{id: i + 1, number: i + 1})
+		sortedset.Insert(i+1, i+1, &Entity{id: i + 1, number: i + 1})
 
 		max := sortedset.Max()
 		if max == nil {
@@ -25,10 +25,10 @@ func Test_Insert_Max(t *testing.T) {
 }
 
 func Test_Delete_Max(t *testing.T) {
-	sortedset := collection.NewSortedSet[*Entity]()
+	sortedset := collection.NewSortedSet[int, int, *Entity]()
 	n := 10
 	for i := 0; i < n; i++ {
-		sortedset.Insert(&Entity{id: i + 1, number: i + 1})
+		sortedset.Insert(i+1, i+1, &Entity{id: i + 1, number: i + 1})
 	}
 
 	for i := n - 1; i >= 0; i-- {
@@ -42,7 +42,7 @@ func Test_Delete_Max(t *testing.T) {
 		if max.id != i+1 || max.number != i+1 {
 			t.Fatalf("expect max: %d-%d, actual: %d-%d", i+1, i+1, max.id, max.number)
 		}
-		sortedset.Remove(max)
+		sortedset.Remove(max.id, max.number)
 	}
 
 	if sortedset.Len() != 0 {
@@ -51,10 +51,10 @@ func Test_Delete_Max(t *testing.T) {
 }
 
 func Test_Insert_Top_Max(t *testing.T) {
-	sortedset := collection.NewSortedSet[*Entity]()
+	sortedset := collection.NewSortedSet[int, int, *Entity]()
 	n, batch := 100, 10
 	for i := 0; i < n; i++ {
-		sortedset.Insert(&Entity{id: i + 1, number: i + 1})
+		sortedset.Insert(i+1, i+1, &Entity{id: i + 1, number: i + 1})
 	}
 
 	entites := make([]*Entity, 0, n)
@@ -79,7 +79,7 @@ func Test_Insert_Top_Max(t *testing.T) {
 }
 
 func Test_Empty_Max(t *testing.T) {
-	sortedset := collection.NewSortedSet[*Entity]()
+	sortedset := collection.NewSortedSet[int, int, *Entity]()
 	max := sortedset.Max()
 	if max != nil {
 		t.Fatal("get max entity for empty set")
@@ -90,26 +90,11 @@ func Test_Empty_Max(t *testing.T) {
 }
 
 func Test_Empty_Remove(t *testing.T) {
-	sortedset := collection.NewSortedSet[*Entity]()
-	sortedset.Remove(&Entity{})
+	sortedset := collection.NewSortedSet[int, int, *Entity]()
+	sortedset.Remove(1, 1)
 }
 
 type Entity struct {
 	id     int
 	number int
-}
-
-func (block *Entity) Compare(other collection.Comparable) int {
-	otherBlock := other.(*Entity)
-	if block.number < otherBlock.number {
-		return -1
-	} else if block.number == otherBlock.number {
-		return 0
-	}
-	return 1
-}
-
-func (block *Entity) Equal(other collection.Comparable) bool {
-	otherBlock := other.(*Entity)
-	return block.id == otherBlock.id
 }
