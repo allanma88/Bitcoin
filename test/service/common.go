@@ -3,80 +3,85 @@ package service
 import (
 	"Bitcoin/src/database"
 	"encoding/json"
+	"errors"
 )
 
-type TestTable[T any] struct {
+type TestTable struct {
 	Items map[string][]byte
 	Keys  []string
 }
 
-func newTestTable[T any]() *TestTable[T] {
+func newTestTable() *TestTable {
 	items := make(map[string][]byte)
 	keys := make([]string, 0)
-	txdb := &TestTable[T]{Items: items, Keys: keys}
+	txdb := &TestTable{Items: items, Keys: keys}
 	return txdb
 }
 
-func (table *TestTable[T]) Save(key []byte, val *T) error {
-	data, err := json.Marshal(val)
-	if err != nil {
-		return err
-	}
-
-	table.Items[string(key)] = data
+func (table *TestTable) Save(key, val []byte) error {
+	table.Items[string(key)] = val
 	table.Keys = append(table.Keys, string(key))
 
 	return nil
 }
 
-func (table *TestTable[T]) Get(key []byte) (*T, error) {
+func (table *TestTable) Get(key []byte) ([]byte, error) {
 	data, ok := table.Items[string(key)]
 	if ok {
-		var val T
-		err := json.Unmarshal(data, &val)
-		if err != nil {
-			return nil, err
-		}
-		return &val, nil
+		return data, nil
 	}
 	return nil, nil
 }
 
-func (table *TestTable[T]) Remove(key []byte) error {
+func (table *TestTable) Remove(key []byte) error {
 	delete(table.Items, string(key))
 	return nil
 }
 
-type TestBaseDB[T any] struct {
-	Tables map[string]*TestTable[T]
+type TestBaseDB struct {
+	Tables map[string]*TestTable
 }
 
-func newTestBaseDB[T any]() database.IBaseDB[T] {
-	tables := make(map[string]*TestTable[T])
-	txdb := &TestBaseDB[T]{Tables: tables}
+func newTestBaseDB() database.IBaseDB {
+	tables := make(map[string]*TestTable)
+	txdb := &TestBaseDB{Tables: tables}
 	return txdb
 }
 
-func (db *TestBaseDB[T]) Save(prefix, key []byte, val *T) error {
+func (db *TestBaseDB) Save(prefix []byte, key, val any) error {
+	keydata, err := serialize(key)
+	if err != nil {
+		return err
+	}
+
+	valdata, err := serialize(val)
+	if err != nil {
+		return err
+	}
+
 	table, ok := db.Tables[string(prefix)]
 
 	if !ok {
-		table = newTestTable[T]()
+		table = newTestTable()
 		db.Tables[string(prefix)] = table
 	}
 
-	return table.Save(key, val)
+	return table.Save(keydata, valdata)
 }
 
-func (db *TestBaseDB[T]) Get(prefix, key []byte) (*T, error) {
+func (db *TestBaseDB) Get(prefix, key []byte, v any) (bool, error) {
 	table, ok := db.Tables[string(prefix)]
 	if !ok {
-		return nil, nil
+		return false, nil
 	}
-	return table.Get(key)
+	data, err := table.Get(key)
+	if err != nil {
+		return false, err
+	}
+	return true, json.Unmarshal(data, v)
 }
 
-func (db *TestBaseDB[T]) Move(oldPrefix, newPrefix, key []byte, val *T) error {
+func (db *TestBaseDB) Move(oldPrefix, newPrefix, key, val []byte) error {
 	oldTable, ok := db.Tables[string(oldPrefix)]
 	if ok {
 		err := oldTable.Remove(key)
@@ -87,13 +92,32 @@ func (db *TestBaseDB[T]) Move(oldPrefix, newPrefix, key []byte, val *T) error {
 
 	table, ok := db.Tables[string(newPrefix)]
 	if !ok {
-		table = newTestTable[T]()
+		table = newTestTable()
 		db.Tables[string(newPrefix)] = table
 	}
 
 	return table.Save(key, val)
 }
 
-func (db *TestBaseDB[T]) Close() error {
+func (db *TestBaseDB) Filter(prefix, start []byte, n int) ([][]byte, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (db *TestBaseDB) StartBatch() database.IBatch {
 	return nil
+}
+
+func (db *TestBaseDB) EndBatch(batch database.IBatch) error {
+	return errors.New("not implemented")
+}
+
+func (db *TestBaseDB) Close() error {
+	return nil
+}
+
+func serialize(v any) ([]byte, error) {
+	if data, ok := v.([]byte); ok {
+		return data, nil
+	}
+	return json.Marshal(v)
 }

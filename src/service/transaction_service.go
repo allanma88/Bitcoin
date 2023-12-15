@@ -9,14 +9,14 @@ import (
 )
 
 type TransactionService struct {
-	database.IBlockContentDB
+	database.IBlockDB
 }
 
 type GetTxFunc func([]byte) *model.Transaction
 
-func NewTransactionService(db database.IBlockContentDB) *TransactionService {
+func NewTransactionService(db database.IBlockDB) *TransactionService {
 	service := &TransactionService{
-		IBlockContentDB: db,
+		IBlockDB: db,
 	}
 	return service
 }
@@ -148,7 +148,7 @@ func (service *TransactionService) validateInput(input *model.In, tx *model.Tran
 	if input.Index >= uint32(len(prevTx.Outs)) {
 		return 0, errors.ErrInLenOutOfIndex
 	}
-	if prevTx.Timestamp.Compare(tx.Timestamp) >= 0 {
+	if prevTx.Timestamp.Compare(tx.Timestamp) > 0 {
 		return 0, errors.ErrInTooLate
 	}
 

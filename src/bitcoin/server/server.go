@@ -16,6 +16,7 @@ const (
 	TxBroadcastQueueSize    = 10000
 	BlockBroadcastQueueSize = 10000
 	PullBlockQueueSize      = 100
+	BlocksPerSave           = 100
 )
 
 type BitcoinServer struct {
@@ -34,16 +35,17 @@ type BitcoinServer struct {
 	blockBroadcastQueue chan *model.Block
 	syncBlockQueue      chan string
 	cancelFunc          context.CancelCauseFunc
+	exiting             bool
 }
 
-func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
+func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
 	server := &BitcoinServer{
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg.Endpoint, cfg.Bootstraps),
 		utxoService:         service.NewUtxoService(),
 		chainService:        service.NewChainService(), //TODO: how to set when server restart?
-		txService:           service.NewTransactionService(blockContentDb),
-		blockService:        service.NewBlockService(blockdb, blockContentDb),
+		txService:           service.NewTransactionService(blockdb),
+		blockService:        service.NewBlockService(blockdb),
 		mempool:             service.NewMemPool(int(cfg.MaxTxSizePerBlock)),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
@@ -52,6 +54,10 @@ func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB, blockConten
 	}
 	server.syncService = service.NewSyncService(server.chainService, server.nodeService, server.addBlock)
 	server.mineService = service.NewMineService(cfg, server.txService, server.mempool)
+
+	if err := server.load(); err != nil {
+		return nil, err
+	}
 
 	return server, nil
 }
@@ -133,12 +139,20 @@ func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBloc
 func (s *BitcoinServer) BroadcastTx() {
 	for tx := range s.txBroadcastQueue {
 		s.nodeService.SendTx(tx)
+
+		if s.exiting {
+			break
+		}
 	}
 }
 
 func (s *BitcoinServer) BroadcastBlock() {
 	for block := range s.blockBroadcastQueue {
 		s.nodeService.SendBlock(block)
+
+		if s.exiting {
+			break
+		}
 	}
 }
 
@@ -150,11 +164,15 @@ func (s *BitcoinServer) SyncBlocks(wait *sync.WaitGroup) {
 		wait.Add(1)
 		s.syncService.SyncBlocks(addr)
 		wait.Done()
+
+		if s.exiting {
+			break
+		}
 	}
 }
 
 func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
-	for {
+	for !s.exiting {
 		lastBlock := s.chainService.GetMainChain()
 		block, err := s.mineService.MineBlock(lastBlock, ctx, wait)
 		if err != nil {
@@ -166,7 +184,38 @@ func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
 			log.Printf("add block error: %v", err)
 			continue
 		}
+
+		if block.Number%BlocksPerSave == 0 {
+			if err := s.utxoService.Save(s.cfg.DataDir); err != nil {
+				log.Printf("save utxo error: %v", err)
+				continue
+			}
+		}
 	}
+}
+
+func (s *BitcoinServer) Shutdown() error {
+	if err := s.mempool.Save(s.cfg.DataDir); err != nil {
+		return err
+	}
+	if err := s.utxoService.Save(s.cfg.DataDir); err != nil {
+		return err
+	}
+	s.exiting = true
+	return nil
+}
+
+func (s *BitcoinServer) load() error {
+	if err := s.mempool.Load(s.cfg.DataDir); err != nil {
+		return err
+	}
+	if err := s.utxoService.Load(s.cfg.DataDir); err != nil {
+		return err
+	}
+	if err := s.blockService.LoadBlocks(s.utxoService); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *BitcoinServer) addBlock(block *model.Block) error {

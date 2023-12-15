@@ -3,10 +3,27 @@ package service
 import (
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+)
+
+const (
+	UTXO = "utxo"
 )
 
 type UtxoService struct {
-	utxo map[string]uint64
+	utxo      map[string]uint64
+	timestamp time.Time
+}
+
+func (service *UtxoService) MarshalJSON() ([]byte, error) {
+	return json.Marshal(service)
+}
+
+func (service *UtxoService) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, service)
 }
 
 func NewUtxoService() *UtxoService {
@@ -45,6 +62,10 @@ func (service *UtxoService) ApplyBalances(blocks ...*model.Block) error {
 		}
 	}
 
+	if len(blocks) > 0 {
+		service.timestamp = blocks[len(blocks)-1].Time
+	}
+
 	for addr, val := range utxo {
 		service.utxo[addr] += uint64(val)
 		if service.utxo[addr] == 0 {
@@ -79,6 +100,43 @@ func (service *UtxoService) rollbackBalances(blocks []*model.Block) error {
 		if service.utxo[addr] == 0 {
 			delete(service.utxo, addr)
 		}
+	}
+	return nil
+}
+
+func (service *UtxoService) Load(dir string) error {
+	data, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, UTXO))
+	if err != nil {
+		return err
+	}
+
+	var s UtxoService
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	service.timestamp = s.timestamp
+	for addr, val := range s.utxo {
+		service.utxo[addr] = val
+	}
+	return nil
+}
+
+func (service *UtxoService) Save(dir string) error {
+	// TODO: lock?
+	data, err := json.Marshal(service)
+	if err != nil {
+		return err
+	}
+
+	file, err := os.Create(fmt.Sprintf("%s/%s", dir, UTXO))
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	if _, err := file.Write(data); err != nil {
+		return err
 	}
 	return nil
 }

@@ -12,25 +12,24 @@ import (
 
 const (
 	MaxBlocksPerGetBlockReq = 100
+	FetchBatch              = 100
 )
 
 //TODO: more test cases
 
 type BlockService struct {
-	blockDB        database.IBlockDB
-	blockContentDB database.IBlockContentDB
+	database.IBlockDB
 }
 
-func NewBlockService(blockDB database.IBlockDB, blockContentDB database.IBlockContentDB) *BlockService {
+func NewBlockService(blockDB database.IBlockDB) *BlockService {
 	return &BlockService{
-		blockDB:        blockDB,
-		blockContentDB: blockContentDB,
+		IBlockDB: blockDB,
 	}
 }
 
 func (service *BlockService) GetBlocks(mainChain *model.Block, blockhashes [][]byte) ([]*model.Block, uint64, error) {
 	for _, blockHash := range blockhashes {
-		block, err := service.getBlock(blockHash)
+		block, err := service.GetBlock(blockHash)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -48,27 +47,25 @@ func (service *BlockService) GetBlocks(mainChain *model.Block, blockhashes [][]b
 	return nil, 0, nil
 }
 
-func (service *BlockService) SaveBlock(block *model.Block) error {
-	err := service.blockDB.SaveBlock(block)
-	if err != nil {
-		return err
+// func (service *BlockService) SaveBlock(block *model.Block) error {
+// 	return service.SaveBlock(block)
+// }
+
+func (service *BlockService) LoadBlocks(utxo *UtxoService) error {
+	for {
+		blocks, err := service.FilterBlock(utxo.timestamp, FetchBatch)
+		if err != nil {
+			return err
+		}
+		if err = utxo.ApplyBalances(blocks...); err != nil {
+			return err
+		}
+		if len(blocks) < FetchBatch {
+			break
+		}
 	}
 
-	return service.blockContentDB.SaveBlockContent(block.RootHash, block.Body)
-}
-
-func (service *BlockService) getBlock(blockHash []byte) (*model.Block, error) {
-	block, err := service.blockDB.GetBlock(blockHash)
-	if err != nil {
-		return nil, err
-	}
-
-	content, err := service.blockContentDB.GetBlockContent(blockHash)
-	if err != nil {
-		return nil, err
-	}
-	block.Body = content
-	return block, nil
+	return nil
 }
 
 func (service *BlockService) Validate(block *model.Block) error {
@@ -82,7 +79,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return err
 	}
 
-	existBlock, err := service.blockDB.GetBlock(hash)
+	existBlock, err := service.GetBlock(hash)
 	if err != nil {
 		return err
 	}
@@ -90,7 +87,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return errors.ErrBlockExist
 	}
 
-	prevBlock, err := service.blockDB.GetBlock(block.Prevhash)
+	prevBlock, err := service.GetBlock(block.Prevhash)
 	if err != nil {
 		return err
 	}
@@ -99,6 +96,9 @@ func (service *BlockService) Validate(block *model.Block) error {
 	}
 	if block.Number != prevBlock.Number+1 {
 		return errors.ErrBlockNumberInvalid
+	}
+	if prevBlock.Time.Compare(block.Time) > 0 {
+		return errors.ErrBlockTooLate
 	}
 	block.PrevBlock = prevBlock
 
