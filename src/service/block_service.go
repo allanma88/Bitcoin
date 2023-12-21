@@ -29,14 +29,7 @@ func NewBlockService(blockDB database.IBlockDB) *BlockService {
 
 func (service *BlockService) GetBlocks(lastBlockHash []byte, blockhashes [][]byte, ctxs []context.Context) ([]*model.Block, uint64, error) {
 	for _, blockHash := range blockhashes {
-		for _, ctx := range ctxs {
-			err := context.Cause(ctx)
-			if err != nil {
-				return nil, 0, err
-			}
-		}
-
-		ancestors, err := service.ancestors(lastBlockHash, blockHash)
+		ancestors, err := service.ancestors(lastBlockHash, blockHash, ctxs)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -154,9 +147,16 @@ func validateRootHash(roothash []byte, tree *collection.MerkleTree[*model.Transa
 	return nil
 }
 
-func (service *BlockService) ancestors(lastBlockHash, ancestor []byte) ([]*model.Block, error) {
+func (service *BlockService) ancestors(lastBlockHash, ancestor []byte, ctxs []context.Context) ([]*model.Block, error) {
 	ancestors := make([]*model.Block, 0)
 	for !bytes.Equal(ancestor, lastBlockHash) {
+		for _, ctx := range ctxs {
+			err := context.Cause(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		//TODO: split the GetBlock api to GetBlockHeader and GetBlockContent, not include body here
 		block, err := service.GetBlock(lastBlockHash, true)
 		if err != nil {
