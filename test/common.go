@@ -1,9 +1,9 @@
 package test
 
 import (
+	"Bitcoin/src/collection"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/infra"
-	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"context"
 	"crypto/ecdsa"
@@ -86,7 +86,7 @@ func NewBlock(number uint64, difficultyLevel uint64, prevhash []byte) *model.Blo
 		txs[i] = NewTransaction([]byte{})
 	}
 
-	tree, err := merkle.BuildTree(txs)
+	tree, err := collection.BuildTree(txs)
 	if err != nil {
 		log.Fatalf("builder merkle tree error: %s", err)
 	}

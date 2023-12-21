@@ -8,50 +8,60 @@ const (
 	MaxLevel = 32
 )
 
-type Comparable interface {
-	Compare(another Comparable) int
-	Equal(another Comparable) bool
+type Number interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64
 }
 
-type SortedSet[T Comparable] struct {
-	header   *skipListNode[T]
-	tail     *skipListNode[T]
+type SortedSet[K comparable, S Number, T any] struct {
+	header   *skipListNode[K, S, T]
+	tail     *skipListNode[K, S, T]
 	maxLevel int
 	length   int
 }
 
-type skipListLevel[T Comparable] struct {
-	forward *skipListNode[T]
+type skipListLevel[K comparable, S Number, T any] struct {
+	forward *skipListNode[K, S, T]
 	span    int
 }
 
-type skipListNode[T Comparable] struct {
-	backward *skipListNode[T]
-	levels   []*skipListLevel[T]
+type skipListNode[K comparable, S Number, T any] struct {
+	backward *skipListNode[K, S, T]
+	levels   []*skipListLevel[K, S, T]
+	key      K
+	score    S
 	val      T
 }
 
-func NewSortedSet[T Comparable]() *SortedSet[T] {
-	header := &skipListNode[T]{
-		levels: make([]*skipListLevel[T], MaxLevel),
+func NewSortedSet[K comparable, S Number, T any]() *SortedSet[K, S, T] {
+	header := &skipListNode[K, S, T]{
+		levels: make([]*skipListLevel[K, S, T], MaxLevel),
 	}
 	for l := 0; l < MaxLevel; l++ {
-		header.levels[l] = &skipListLevel[T]{}
+		header.levels[l] = &skipListLevel[K, S, T]{}
 	}
-	return &SortedSet[T]{
+	return &SortedSet[K, S, T]{
 		header: header,
 		tail:   header,
 	}
 }
 
-func (set *SortedSet[T]) Max() T {
+func (set *SortedSet[K, S, T]) Min() T {
+	if set.length > 0 {
+		return set.header.levels[0].forward.val
+	}
+	return *new(T)
+}
+
+func (set *SortedSet[K, S, T]) Max() T {
 	if set.length > 0 {
 		return set.tail.val
 	}
 	return *new(T)
 }
 
-func (set *SortedSet[T]) TopMax(m, n int) []T {
+func (set *SortedSet[K, S, T]) TopMax(m, n int) []T {
 	items := make([]T, 0, n-m)
 	node := set.header
 	span := 0
@@ -78,7 +88,7 @@ func (set *SortedSet[T]) TopMax(m, n int) []T {
 	return items
 }
 
-func (set *SortedSet[T]) Insert(t T) {
+func (set *SortedSet[K, S, T]) Insert(key K, score S, t T) {
 	totalSpan := 0
 	node := set.header
 
@@ -87,20 +97,22 @@ func (set *SortedSet[T]) Insert(t T) {
 		set.maxLevel = nlevel
 	}
 
-	nodes := make([]*skipListNode[T], set.maxLevel)
+	nodes := make([]*skipListNode[K, S, T], set.maxLevel)
 	spans := make([]int, set.maxLevel)
 
-	newnode := &skipListNode[T]{
+	newnode := &skipListNode[K, S, T]{
+		key:    key,
+		score:  score,
 		val:    t,
-		levels: make([]*skipListLevel[T], nlevel),
+		levels: make([]*skipListLevel[K, S, T], nlevel),
 	}
 	for l := 0; l < nlevel; l++ {
-		newnode.levels[l] = &skipListLevel[T]{}
+		newnode.levels[l] = &skipListLevel[K, S, T]{}
 	}
 
 	for l := set.maxLevel - 1; l >= 0; l-- {
 		for ; node.levels[l].forward != nil; node = node.levels[l].forward {
-			if t.Compare(node.levels[l].forward.val) < 1 {
+			if score < node.levels[l].forward.score {
 				break
 			}
 			totalSpan += node.levels[l].span
@@ -133,17 +145,17 @@ func (set *SortedSet[T]) Insert(t T) {
 	set.length++
 }
 
-func (set *SortedSet[T]) Remove(t T) {
-	nodes := make([]*skipListNode[T], set.maxLevel)
+func (set *SortedSet[K, S, T]) Remove(key K, score S) {
+	nodes := make([]*skipListNode[K, S, T], set.maxLevel)
 	exist := false
 	node := set.header
 	for i := set.maxLevel - 1; i >= 0; i-- {
 		for ; node.levels[i].forward != nil; node = node.levels[i].forward {
-			if node.levels[i].forward.val.Equal(t) {
+			if node.levels[i].forward.key == key {
 				exist = true
 				break
 			}
-			if t.Compare(node.levels[i].forward.val) < 1 {
+			if score < node.levels[i].forward.score {
 				break
 			}
 		}
@@ -177,7 +189,41 @@ func (set *SortedSet[T]) Remove(t T) {
 	set.length--
 }
 
-func (set *SortedSet[T]) Len() int {
+func (set *SortedSet[K, S, T]) Get(key K, score S) T {
+	nodes := make([]*skipListNode[K, S, T], set.maxLevel)
+	exist := false
+	node := set.header
+	for i := set.maxLevel - 1; i >= 0; i-- {
+		for ; node.levels[i].forward != nil; node = node.levels[i].forward {
+			if node.levels[i].forward.key == key {
+				exist = true
+				break
+			}
+			if score < node.levels[i].forward.score {
+				break
+			}
+		}
+		nodes[i] = node
+	}
+
+	if !exist {
+		return nodes[0].levels[0].forward.val
+	} else {
+		return *new(T)
+	}
+}
+
+func (set *SortedSet[K, S, T]) Get1(key K) T {
+	node := set.header
+	for ; node.levels[0].forward != nil; node = node.levels[0].forward {
+		if node.levels[0].forward.key == key {
+			return node.levels[0].forward.val
+		}
+	}
+	return *new(T)
+}
+
+func (set *SortedSet[K, S, T]) Len() int {
 	return set.length
 }
 

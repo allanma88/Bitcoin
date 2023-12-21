@@ -5,29 +5,38 @@ import (
 	"Bitcoin/src/model"
 )
 
+const (
+	UTXO = "utxo"
+)
+
 type UtxoService struct {
 	utxo map[string]uint64
 }
 
-func NewUtxoService() *UtxoService {
-	return &UtxoService{utxo: make(map[string]uint64)}
-}
-
-// TODO: test case
-func (service *UtxoService) SwitchBalances(rollbackBlocks, applyBlocks []*model.Block) error {
-	//TODO: maybe merge rollback and apply
-	if err := service.rollbackBalances(rollbackBlocks); err != nil {
-		return err
-	}
-	if err := service.ApplyBalances(applyBlocks...); err != nil {
-		return err
-	}
+// TODO: test case: apply all or none
+func (s *UtxoService) ApplyBalance(block *model.Block) error {
+	utxo := make(map[string]int64)
+	s.applyBalances(utxo, block)
+	s.applyUtxo(utxo)
 	return nil
 }
 
 // TODO: test case: apply all or none
-func (service *UtxoService) ApplyBalances(blocks ...*model.Block) error {
+func (s *UtxoService) SwitchBalances(rollbackBlocks, applyBlocks []*model.Block) error {
+	//TODO: maybe merge rollback and apply
 	utxo := make(map[string]int64)
+	if err := s.rollbackBalances(utxo, rollbackBlocks); err != nil {
+		return err
+	}
+	if err := s.applyBalances(utxo, applyBlocks...); err != nil {
+		return err
+	}
+
+	s.applyUtxo(utxo)
+	return nil
+}
+
+func (s *UtxoService) applyBalances(utxo map[string]int64, blocks ...*model.Block) error {
 	for _, block := range blocks {
 		for _, tx := range block.GetTxs() {
 			for _, in := range tx.Ins {
@@ -39,24 +48,17 @@ func (service *UtxoService) ApplyBalances(blocks ...*model.Block) error {
 			}
 		}
 		for addr, val := range utxo {
-			if int64(service.utxo[addr])+val < 0 {
+			if int64(s.utxo[addr])+val < 0 {
 				return errors.ErrAccountNotEnoughValues
 			}
 		}
 	}
 
-	for addr, val := range utxo {
-		service.utxo[addr] += uint64(val)
-		if service.utxo[addr] == 0 {
-			delete(service.utxo, addr)
-		}
-	}
 	return nil
 }
 
-// TODO: test case: apply all or none
-func (service *UtxoService) rollbackBalances(blocks []*model.Block) error {
-	utxo := make(map[string]int64)
+func (s *UtxoService) rollbackBalances(utxo map[string]int64, blocks []*model.Block) error {
+	// utxo := make(map[string]int64)
 	for _, block := range blocks {
 		for _, tx := range block.GetTxs() {
 			for _, in := range tx.Ins {
@@ -68,17 +70,20 @@ func (service *UtxoService) rollbackBalances(blocks []*model.Block) error {
 			}
 		}
 		for addr, val := range utxo {
-			if int64(service.utxo[addr])+val < 0 {
+			if int64(s.utxo[addr])+val < 0 {
 				return errors.ErrAccountNotEnoughValues
 			}
 		}
 	}
 
+	return nil
+}
+
+func (s *UtxoService) applyUtxo(utxo map[string]int64) {
 	for addr, val := range utxo {
-		service.utxo[addr] += uint64(val)
-		if service.utxo[addr] == 0 {
-			delete(service.utxo, addr)
+		s.utxo[addr] += uint64(val)
+		if s.utxo[addr] == 0 {
+			delete(s.utxo, addr)
 		}
 	}
-	return nil
 }

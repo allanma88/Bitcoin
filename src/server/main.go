@@ -5,11 +5,14 @@ import (
 	"Bitcoin/src/config"
 	"Bitcoin/src/database"
 	"Bitcoin/src/protocol"
-	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/grpc"
@@ -32,20 +35,16 @@ func main() {
 		log.Fatalf("failed to open db: %v", err)
 	}
 
-	txdb := database.NewTransactionDB(db)
 	blockdb := database.NewBlockDB(db)
-	blockContentDb := database.NewBlockContentDB(db)
 
-	ctx, cancelFunc := context.WithCancelCause(context.Background())
-
-	server, err := server.NewBitcoinServer(cfg, txdb, blockdb, blockContentDb, cancelFunc)
+	server, err := server.NewBitcoinServer(cfg, blockdb)
 	if err != nil {
 		log.Fatalf("failed to create server: %v", err)
 	}
 
 	wg := &sync.WaitGroup{}
 
-	go server.MineBlock(ctx, wg)
+	go server.MineBlock(wg)
 	go server.BroadcastTx()
 	go server.BroadcastBlock()
 	go server.SyncBlocks(wg)
@@ -60,7 +59,26 @@ func main() {
 	protocol.RegisterBlockServer(register, server)
 	log.Printf("server listening at %v", listener.Addr())
 
+	go gracefulShutdown(register, server)
 	if err := register.Serve(listener); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+}
+
+func gracefulShutdown(register *grpc.Server, server *server.BitcoinServer) {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt)
+	signal.Notify(signalChan, syscall.SIGTERM)
+
+	<-signalChan
+	fmt.Println("Sutting down.")
+
+	register.GracefulStop()
+
+	if err := server.Shutdown(); err != nil {
+		fmt.Printf("Shutting down err: %v", err)
+	}
+	fmt.Println("Sutted down.")
+
+	os.Exit(0)
 }

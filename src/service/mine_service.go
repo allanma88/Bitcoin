@@ -1,8 +1,8 @@
 package service
 
 import (
+	"Bitcoin/src/collection"
 	"Bitcoin/src/config"
-	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"context"
 	"sync"
@@ -12,21 +12,21 @@ import (
 type MineService struct {
 	cfg       *config.Config
 	txService *TransactionService
-	mineQueue chan *model.Transaction
+	mempool   *MemPool
 }
 
-func NewMineService(cfg *config.Config, txService *TransactionService, mineQueue chan *model.Transaction) *MineService {
+func NewMineService(cfg *config.Config, txService *TransactionService, mempool *MemPool) *MineService {
 	return &MineService{
 		cfg:       cfg,
 		txService: txService,
-		mineQueue: mineQueue,
+		mempool:   mempool,
 	}
 }
 
 func (s *MineService) MineBlock(lastBlock *model.Block, ctx context.Context, wait *sync.WaitGroup) (*model.Block, error) {
 	reward := lastBlock.GetNextReward(s.cfg.InitRewrad, s.cfg.BlocksPerRewrad)
 
-	txs, err := s.receiveTxs(reward)
+	txs, err := s.fetchTxs(reward)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (s *MineService) MineBlock(lastBlock *model.Block, ctx context.Context, wai
 }
 
 func (s *MineService) mineBlock(lastBlock *model.Block, transactions []*model.Transaction, ctx context.Context) (*model.Block, error) {
-	content, err := merkle.BuildTree(transactions)
+	content, err := collection.BuildTree(transactions)
 	if err != nil {
 		return nil, err
 	}
@@ -70,16 +70,12 @@ func (s *MineService) mineBlock(lastBlock *model.Block, transactions []*model.Tr
 	return block, nil
 }
 
-func (s *MineService) receiveTxs(reward uint64) ([]*model.Transaction, error) {
-	txs := make([]*model.Transaction, s.cfg.MaxTxSizePerBlock)
-	var totalFee uint64 = 0
-	for i := 1; i < int(s.cfg.MaxTxSizePerBlock); i++ {
-		txs[i] = <-s.mineQueue
-		fee, err := s.txService.ValidateOffChainTx(txs[i])
-		if err != nil {
-			return nil, err
-		}
-		totalFee += fee
+func (s *MineService) fetchTxs(reward uint64) ([]*model.Transaction, error) {
+	txs := s.mempool.TopMax(int(s.cfg.MaxTxSizePerBlock))
+
+	totalFee, err := s.txService.ValidateTxs(txs, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	coinbaseTx, err := model.MakeCoinbaseTx(s.cfg.MinerPubkey, reward+totalFee)
@@ -87,6 +83,6 @@ func (s *MineService) receiveTxs(reward uint64) ([]*model.Transaction, error) {
 		return nil, err
 	}
 
-	txs[0] = coinbaseTx
+	txs = append([]*model.Transaction{coinbaseTx}, txs...)
 	return txs, nil
 }

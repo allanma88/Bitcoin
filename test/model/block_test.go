@@ -1,9 +1,9 @@
 package model
 
 import (
+	"Bitcoin/src/collection"
 	"Bitcoin/src/cryptography"
 	"Bitcoin/src/infra"
-	"Bitcoin/src/merkle"
 	"Bitcoin/src/model"
 	"Bitcoin/src/protocol"
 	"Bitcoin/test"
@@ -175,7 +175,7 @@ func Test_Block_To(t *testing.T) {
 		t.Fatalf("block to err: %v", err)
 	}
 
-	var tree merkle.MerkleTree[*model.Transaction]
+	var tree collection.MerkleTree[*model.Transaction]
 	err = json.Unmarshal(req.Content, &tree)
 	if err != nil {
 		log.Fatalf("unmarshal tree error: %v", err)
@@ -220,7 +220,7 @@ func newBlockReq() *protocol.BlockReq {
 		txs[i] = test.NewTransaction(nil)
 	}
 
-	tree, err := merkle.BuildTree(txs)
+	tree, err := collection.BuildTree(txs)
 	if err != nil {
 		log.Fatalf("build merkle tree err: %v", err)
 	}

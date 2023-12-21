@@ -16,6 +16,7 @@ const (
 	TxBroadcastQueueSize    = 10000
 	BlockBroadcastQueueSize = 10000
 	PullBlockQueueSize      = 100
+	BlocksPerSave           = 100
 )
 
 type BitcoinServer struct {
@@ -23,35 +24,44 @@ type BitcoinServer struct {
 	protocol.BlockServer
 	cfg                 *config.Config
 	nodeService         *service.NodeService
-	utxoService         *service.UtxoService
 	chainService        *service.ChainService
 	txService           *service.TransactionService
 	blockService        *service.BlockService
 	syncService         *service.SyncService
 	mineService         *service.MineService
+	mempool             *service.MemPool
 	txBroadcastQueue    chan *model.Transaction
 	blockBroadcastQueue chan *model.Block
-	mineQueue           chan *model.Transaction //TODO: remove
 	syncBlockQueue      chan string
+	exitChan            chan string
+	ctx                 context.Context
 	cancelFunc          context.CancelCauseFunc
+	exiting             bool
 }
 
-func NewBitcoinServer(cfg *config.Config, txdb database.ITransactionDB, blockdb database.IBlockDB, blockContentDb database.IBlockContentDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
+func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB) (*BitcoinServer, error) {
+	ctx, cancelFunc := context.WithCancelCause(context.Background())
+
 	server := &BitcoinServer{
 		cfg:                 cfg,
-		nodeService:         service.NewNodeService(cfg),
-		utxoService:         service.NewUtxoService(),
-		chainService:        service.NewChainService(), //TODO: how to set when server restart?
-		txService:           service.NewTransactionService(txdb),
-		blockService:        service.NewBlockService(blockdb, blockContentDb, cfg),
+		nodeService:         service.NewNodeService(cfg.Endpoint, cfg.Bootstraps),
+		chainService:        service.NewChainService(),
+		txService:           service.NewTransactionService(blockdb),
+		blockService:        service.NewBlockService(blockdb),
+		mempool:             service.NewMemPool(int(cfg.MaxTxSizePerBlock)),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
-		mineQueue:           make(chan *model.Transaction, cfg.MaxTxSizePerBlock),
 		syncBlockQueue:      make(chan string, PullBlockQueueSize),
+		exitChan:            make(chan string),
+		ctx:                 ctx,
 		cancelFunc:          cancelFunc,
 	}
 	server.syncService = service.NewSyncService(server.chainService, server.nodeService, server.addBlock)
-	server.mineService = service.NewMineService(cfg, server.txService, server.mineQueue)
+	server.mineService = service.NewMineService(cfg, server.txService, server.mempool)
+
+	if err := server.load(); err != nil {
+		return nil, err
+	}
 
 	return server, nil
 }
@@ -60,29 +70,24 @@ func (s *BitcoinServer) AddTx(ctx context.Context, request *protocol.Transaction
 	tx := model.TransactionFrom(request)
 
 	log.Printf("received transaction: %x", tx.Hash)
+	f := func(hash []byte) *model.Transaction {
+		return s.mempool.Get(hash)
+	}
 
-	_, err := s.txService.ValidateOffChainTx(tx)
-	if err != nil {
+	if err := s.txService.ValidateTx(tx, f); err != nil {
 		log.Printf("validate transaction %x failed: %v", tx.Hash, err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
 	log.Printf("validated transaction: %x", tx.Hash)
 
-	err = s.txService.SaveOffChainTx(tx)
-	if err != nil {
-		log.Printf("save transaction %x failed: %v", tx.Hash, err)
-		return &protocol.TransactionReply{Result: false}, err
-	}
-	log.Printf("saved transaction: %x", tx.Hash)
+	s.mempool.Put(tx)
+	log.Printf("puted transaction on mempool: %x", tx.Hash)
 
-	go func() {
-		s.txBroadcastQueue <- tx
-		s.mineQueue <- tx
-	}()
+	s.txBroadcastQueue <- tx
+
 	log.Printf("broadcast the transaction: %x", tx.Hash)
 
-	err = s.nodeService.AddAddrs(request.Nodes)
-	if err != nil {
+	if err := s.nodeService.AddAddrs(request.Nodes); err != nil {
 		log.Printf("add nodes failed: %v", err)
 		return &protocol.TransactionReply{Result: false}, err
 	}
@@ -115,8 +120,8 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 
 func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
 	mainChain := s.chainService.GetMainChain()
-	blocks, end, err := s.blockService.GetBlocks(mainChain, request.Blockhashes)
-	if err != nil {
+	blocks, end, err := s.blockService.GetBlocks(mainChain.LastBlockHash, request.Blockhashes, []context.Context{ctx, s.ctx})
+	if blocks == nil || err != nil {
 		return &protocol.GetBlocksReply{}, err
 	}
 
@@ -138,12 +143,22 @@ func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBloc
 func (s *BitcoinServer) BroadcastTx() {
 	for tx := range s.txBroadcastQueue {
 		s.nodeService.SendTx(tx)
+
+		if s.exiting {
+			s.exitChan <- "BroadcastTx"
+			break
+		}
 	}
 }
 
 func (s *BitcoinServer) BroadcastBlock() {
 	for block := range s.blockBroadcastQueue {
 		s.nodeService.SendBlock(block)
+
+		if s.exiting {
+			s.exitChan <- "BroadcastBlock"
+			break
+		}
 	}
 }
 
@@ -155,13 +170,24 @@ func (s *BitcoinServer) SyncBlocks(wait *sync.WaitGroup) {
 		wait.Add(1)
 		s.syncService.SyncBlocks(addr)
 		wait.Done()
+
+		if s.exiting {
+			s.exitChan <- "SyncBlocks"
+			break
+		}
 	}
 }
 
-func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
-	for {
-		lastBlock := s.chainService.GetMainChain()
-		block, err := s.mineService.MineBlock(lastBlock, ctx, wait)
+func (s *BitcoinServer) MineBlock(wait *sync.WaitGroup) {
+	for !s.exiting {
+		mainChain := s.chainService.GetMainChain()
+		lastBlock, err := s.blockService.GetBlock(mainChain.LastBlockHash, false)
+		if err != nil {
+			log.Printf("get last block of main chain error: %v", err)
+			continue
+		}
+
+		block, err := s.mineService.MineBlock(lastBlock, s.ctx, wait)
 		if err != nil {
 			log.Printf("mine block error: %v", err)
 			continue
@@ -171,7 +197,65 @@ func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
 			log.Printf("add block error: %v", err)
 			continue
 		}
+
+		if block.Number%BlocksPerSave == 0 {
+			if err := s.chainService.Save(s.cfg.DataDir); err != nil {
+				log.Printf("chain service save error: %v", err)
+				continue
+			}
+		}
 	}
+	s.exitChan <- "MineBlock"
+}
+
+func (s *BitcoinServer) Shutdown() error {
+	s.cancelFunc(errors.ErrServerStopping)
+	s.exiting = true
+
+	for i := 0; i < 4; i++ {
+		component := <-s.exitChan
+		log.Printf("%s exited", component)
+	}
+
+	if err := s.mempool.Save(s.cfg.DataDir); err != nil {
+		return err
+	}
+
+	if err := s.chainService.Save(s.cfg.DataDir); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *BitcoinServer) load() error {
+	if err := s.mempool.Load(s.cfg.DataDir); err != nil {
+		return err
+	}
+
+	chains, err := s.chainService.Load(s.cfg.DataDir)
+	if err != nil {
+		return err
+	}
+
+	for _, chain := range chains {
+		blockHashes := [][]byte{chain.LastBlockHash}
+		for len(blockHashes) > 0 {
+			blockHash := blockHashes[0]
+			blockHashes = blockHashes[1:]
+			blocks, err := s.blockService.FilterBlock(blockHash)
+			if err != nil {
+				return err
+			}
+			for _, block := range blocks {
+				//TODO: better apply algorithm, only apply the utxo once, no need rollback
+				s.applyBlock(block)
+				blockHashes = append(blockHashes, block.Hash)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *BitcoinServer) addBlock(block *model.Block) error {
@@ -193,6 +277,8 @@ func (s *BitcoinServer) addBlock(block *model.Block) error {
 		return err
 	}
 
+	s.mempool.Remove(block.GetTxs())
+
 	if err = s.blockService.SaveBlock(block); err != nil {
 		log.Printf("save block %x failed: %v", block.Hash, err)
 		return err
@@ -205,10 +291,14 @@ func (s *BitcoinServer) addBlock(block *model.Block) error {
 }
 
 func (s *BitcoinServer) applyBlock(block *model.Block) error {
-	applyBlocks, rollbackBlocks := s.chainService.SetChain(block)
+	applyChain, rollbackChain := s.chainService.ApplyChain(block)
 
-	if applyBlocks != nil && rollbackBlocks != nil {
-		if err := s.utxoService.SwitchBalances(rollbackBlocks, applyBlocks); err != nil {
+	if applyChain != nil && rollbackChain != nil {
+		applyBlocks, rollbackBlocks, err := s.blockService.GetBlocksOfChain(applyChain, rollbackChain)
+		if err != nil {
+			return err
+		}
+		if err := s.chainService.SwitchBalances(rollbackBlocks, applyBlocks); err != nil {
 			return err
 		}
 	} else {
@@ -216,7 +306,7 @@ func (s *BitcoinServer) applyBlock(block *model.Block) error {
 			s.cancelFunc(errors.ErrServerCancelMining)
 		}
 
-		if err := s.utxoService.ApplyBalances(block); err != nil {
+		if err := s.chainService.ApplyBalance(block); err != nil {
 			return err
 		}
 	}

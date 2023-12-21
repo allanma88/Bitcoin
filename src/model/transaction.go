@@ -13,7 +13,7 @@ import (
 
 type In struct {
 	PrevHash  []byte
-	PrevOut   *Out //TODO: waste memory
+	PrevOut   *Out
 	Index     uint32
 	Signature []byte
 }
@@ -93,6 +93,10 @@ func (out *Out) UnmarshalJSON(data []byte) error {
 	return err
 }
 
+func (out *Out) DeepClone() *Out {
+	return &Out{Pubkey: []byte(out.Pubkey), Value: out.Value}
+}
+
 type Transaction struct {
 	Hash      []byte
 	InLen     uint32
@@ -101,6 +105,7 @@ type Transaction struct {
 	Outs      []*Out
 	Timestamp time.Time
 	BlockHash []byte
+	Fee       uint64
 }
 
 type jTransaction struct {
