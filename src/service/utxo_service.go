@@ -3,10 +3,6 @@ package service
 import (
 	"Bitcoin/src/errors"
 	"Bitcoin/src/model"
-	"encoding/json"
-	"fmt"
-	"os"
-	"time"
 )
 
 const (
@@ -14,37 +10,33 @@ const (
 )
 
 type UtxoService struct {
-	utxo      map[string]uint64
-	timestamp time.Time
+	utxo map[string]uint64
 }
 
-func (service *UtxoService) MarshalJSON() ([]byte, error) {
-	return json.Marshal(service)
-}
-
-func (service *UtxoService) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, service)
-}
-
-func NewUtxoService() *UtxoService {
-	return &UtxoService{utxo: make(map[string]uint64)}
-}
-
-// TODO: test case
-func (service *UtxoService) SwitchBalances(rollbackBlocks, applyBlocks []*model.Block) error {
-	//TODO: maybe merge rollback and apply
-	if err := service.rollbackBalances(rollbackBlocks); err != nil {
-		return err
-	}
-	if err := service.ApplyBalances(applyBlocks...); err != nil {
-		return err
-	}
+// TODO: test case: apply all or none
+func (s *UtxoService) ApplyBalance(block *model.Block) error {
+	utxo := make(map[string]int64)
+	s.applyBalances(utxo, block)
+	s.applyUtxo(utxo)
 	return nil
 }
 
 // TODO: test case: apply all or none
-func (service *UtxoService) ApplyBalances(blocks ...*model.Block) error {
+func (s *UtxoService) SwitchBalances(rollbackBlocks, applyBlocks []*model.Block) error {
+	//TODO: maybe merge rollback and apply
 	utxo := make(map[string]int64)
+	if err := s.rollbackBalances(utxo, rollbackBlocks); err != nil {
+		return err
+	}
+	if err := s.applyBalances(utxo, applyBlocks...); err != nil {
+		return err
+	}
+
+	s.applyUtxo(utxo)
+	return nil
+}
+
+func (s *UtxoService) applyBalances(utxo map[string]int64, blocks ...*model.Block) error {
 	for _, block := range blocks {
 		for _, tx := range block.GetTxs() {
 			for _, in := range tx.Ins {
@@ -56,28 +48,17 @@ func (service *UtxoService) ApplyBalances(blocks ...*model.Block) error {
 			}
 		}
 		for addr, val := range utxo {
-			if int64(service.utxo[addr])+val < 0 {
+			if int64(s.utxo[addr])+val < 0 {
 				return errors.ErrAccountNotEnoughValues
 			}
 		}
 	}
 
-	if len(blocks) > 0 {
-		service.timestamp = blocks[len(blocks)-1].Time
-	}
-
-	for addr, val := range utxo {
-		service.utxo[addr] += uint64(val)
-		if service.utxo[addr] == 0 {
-			delete(service.utxo, addr)
-		}
-	}
 	return nil
 }
 
-// TODO: test case: apply all or none
-func (service *UtxoService) rollbackBalances(blocks []*model.Block) error {
-	utxo := make(map[string]int64)
+func (s *UtxoService) rollbackBalances(utxo map[string]int64, blocks []*model.Block) error {
+	// utxo := make(map[string]int64)
 	for _, block := range blocks {
 		for _, tx := range block.GetTxs() {
 			for _, in := range tx.Ins {
@@ -89,54 +70,20 @@ func (service *UtxoService) rollbackBalances(blocks []*model.Block) error {
 			}
 		}
 		for addr, val := range utxo {
-			if int64(service.utxo[addr])+val < 0 {
+			if int64(s.utxo[addr])+val < 0 {
 				return errors.ErrAccountNotEnoughValues
 			}
 		}
 	}
 
+	return nil
+}
+
+func (s *UtxoService) applyUtxo(utxo map[string]int64) {
 	for addr, val := range utxo {
-		service.utxo[addr] += uint64(val)
-		if service.utxo[addr] == 0 {
-			delete(service.utxo, addr)
+		s.utxo[addr] += uint64(val)
+		if s.utxo[addr] == 0 {
+			delete(s.utxo, addr)
 		}
 	}
-	return nil
-}
-
-func (service *UtxoService) Load(dir string) error {
-	data, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, UTXO))
-	if err != nil {
-		return err
-	}
-
-	var s UtxoService
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-
-	service.timestamp = s.timestamp
-	for addr, val := range s.utxo {
-		service.utxo[addr] = val
-	}
-	return nil
-}
-
-func (service *UtxoService) Save(dir string) error {
-	// TODO: lock?
-	data, err := json.Marshal(service)
-	if err != nil {
-		return err
-	}
-
-	file, err := os.Create(fmt.Sprintf("%s/%s", dir, UTXO))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	if _, err := file.Write(data); err != nil {
-		return err
-	}
-	return nil
 }

@@ -12,7 +12,6 @@ import (
 
 const (
 	MaxBlocksPerGetBlockReq = 100
-	FetchBatch              = 100
 )
 
 //TODO: more test cases
@@ -58,23 +57,6 @@ func (service *BlockService) Ancestors(lastBlockHash, ancestor []byte) ([]*model
 		lastBlockHash = block.Prevhash
 	}
 	return nil, nil
-}
-
-func (service *BlockService) LoadBlocks(utxo *UtxoService) error {
-	for {
-		blocks, err := service.FilterBlock(utxo.timestamp, FetchBatch)
-		if err != nil {
-			return err
-		}
-		if err = utxo.ApplyBalances(blocks...); err != nil {
-			return err
-		}
-		if len(blocks) < FetchBatch {
-			break
-		}
-	}
-
-	return nil
 }
 
 func (service *BlockService) Validate(block *model.Block) error {

@@ -12,7 +12,7 @@ import (
 type IBaseDB interface {
 	Save(prefix []byte, key, val any) error
 	Get(prefix, key []byte, val any) (bool, error)
-	Filter(prefix, start []byte, n int) ([][]byte, error)
+	Filter(prefix, start []byte) ([][]byte, error)
 	StartBatch() IBatch
 	EndBatch(batch IBatch) error
 	Close() error
@@ -53,17 +53,14 @@ func (db *BaseDB) Get(prefix, key []byte, val any) (bool, error) {
 	return true, json.Unmarshal(data, val)
 }
 
-func (db *BaseDB) Filter(prefix, start []byte, n int) ([][]byte, error) {
+func (db *BaseDB) Filter(prefix, start []byte) ([][]byte, error) {
 	opt := &opt.ReadOptions{}
 	iter := db.Database.NewIterator(util.BytesPrefix(prefix), opt)
 
-	vals := make([][]byte, 0, n)
+	vals := make([][]byte, 0)
 	for ok := iter.Seek(start); ok; ok = iter.Next() {
 		data := iter.Value()
 		vals = append(vals, data)
-		if len(vals) == n {
-			break
-		}
 	}
 	iter.Release()
 

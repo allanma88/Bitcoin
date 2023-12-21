@@ -4,7 +4,6 @@ import (
 	"Bitcoin/src/collection"
 	"Bitcoin/src/model"
 	"encoding/json"
-	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -19,7 +18,7 @@ const (
 type IBlockDB interface {
 	SaveBlock(block *model.Block) error
 	GetBlock(hash []byte, includeBody bool) (*model.Block, error)
-	FilterBlock(timestamp time.Time, n int) ([]*model.Block, error)
+	FilterBlock(prevBlockHash []byte) ([]*model.Block, error)
 	SaveTx(tx *model.Transaction) error
 	GetTx(hash []byte) (*model.Transaction, error)
 	Close() error
@@ -42,7 +41,7 @@ func (db *BlockDB) SaveBlock(block *model.Block) error {
 		return err
 	}
 
-	if err := batch.Save([]byte(BlockIndexTable), block.Time, block.Hash); err != nil {
+	if err := batch.Save([]byte(BlockIndexTable), block.Prevhash, block.Hash); err != nil {
 		return err
 	}
 
@@ -88,13 +87,8 @@ func (db *BlockDB) GetBlock(hash []byte, includeBody bool) (*model.Block, error)
 	return &block, nil
 }
 
-func (db *BlockDB) FilterBlock(timestamp time.Time, n int) ([]*model.Block, error) {
-	data, err := timestamp.MarshalText()
-	if err != nil {
-		return nil, err
-	}
-
-	datalist, err := db.Filter([]byte(BlockIndexTable), data, n)
+func (db *BlockDB) FilterBlock(prevBlockHash []byte) ([]*model.Block, error) {
+	datalist, err := db.Filter([]byte(BlockIndexTable), prevBlockHash)
 	if err != nil {
 		return nil, err
 	}

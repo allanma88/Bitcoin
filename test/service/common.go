@@ -99,7 +99,7 @@ func (db *TestBaseDB) Move(oldPrefix, newPrefix, key, val []byte) error {
 	return table.Save(key, val)
 }
 
-func (db *TestBaseDB) Filter(prefix, start []byte, n int) ([][]byte, error) {
+func (db *TestBaseDB) Filter(prefix, start []byte) ([][]byte, error) {
 	return nil, errors.New("not implemented")
 }
 
