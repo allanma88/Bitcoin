@@ -33,11 +33,15 @@ type BitcoinServer struct {
 	txBroadcastQueue    chan *model.Transaction
 	blockBroadcastQueue chan *model.Block
 	syncBlockQueue      chan string
+	exitChan            chan string
+	ctx                 context.Context
 	cancelFunc          context.CancelCauseFunc
 	exiting             bool
 }
 
-func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB, cancelFunc context.CancelCauseFunc) (*BitcoinServer, error) {
+func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB) (*BitcoinServer, error) {
+	ctx, cancelFunc := context.WithCancelCause(context.Background())
+
 	server := &BitcoinServer{
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg.Endpoint, cfg.Bootstraps),
@@ -48,6 +52,8 @@ func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB, cancelFunc 
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
 		blockBroadcastQueue: make(chan *model.Block, BlockBroadcastQueueSize),
 		syncBlockQueue:      make(chan string, PullBlockQueueSize),
+		exitChan:            make(chan string),
+		ctx:                 ctx,
 		cancelFunc:          cancelFunc,
 	}
 	server.syncService = service.NewSyncService(server.chainService, server.nodeService, server.addBlock)
@@ -114,7 +120,7 @@ func (s *BitcoinServer) NewBlock(ctx context.Context, request *protocol.BlockReq
 
 func (s *BitcoinServer) GetBlocks(ctx context.Context, request *protocol.GetBlocksReq) (*protocol.GetBlocksReply, error) {
 	mainChain := s.chainService.GetMainChain()
-	blocks, end, err := s.blockService.GetBlocks(mainChain.LastBlockHash, request.Blockhashes)
+	blocks, end, err := s.blockService.GetBlocks(mainChain.LastBlockHash, request.Blockhashes, []context.Context{ctx, s.ctx})
 	if blocks == nil || err != nil {
 		return &protocol.GetBlocksReply{}, err
 	}
@@ -139,6 +145,7 @@ func (s *BitcoinServer) BroadcastTx() {
 		s.nodeService.SendTx(tx)
 
 		if s.exiting {
+			s.exitChan <- "BroadcastTx"
 			break
 		}
 	}
@@ -149,6 +156,7 @@ func (s *BitcoinServer) BroadcastBlock() {
 		s.nodeService.SendBlock(block)
 
 		if s.exiting {
+			s.exitChan <- "BroadcastBlock"
 			break
 		}
 	}
@@ -164,12 +172,13 @@ func (s *BitcoinServer) SyncBlocks(wait *sync.WaitGroup) {
 		wait.Done()
 
 		if s.exiting {
+			s.exitChan <- "SyncBlocks"
 			break
 		}
 	}
 }
 
-func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
+func (s *BitcoinServer) MineBlock(wait *sync.WaitGroup) {
 	for !s.exiting {
 		mainChain := s.chainService.GetMainChain()
 		lastBlock, err := s.blockService.GetBlock(mainChain.LastBlockHash, false)
@@ -178,7 +187,7 @@ func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
 			continue
 		}
 
-		block, err := s.mineService.MineBlock(lastBlock, ctx, wait)
+		block, err := s.mineService.MineBlock(lastBlock, s.ctx, wait)
 		if err != nil {
 			log.Printf("mine block error: %v", err)
 			continue
@@ -196,9 +205,18 @@ func (s *BitcoinServer) MineBlock(ctx context.Context, wait *sync.WaitGroup) {
 			}
 		}
 	}
+	s.exitChan <- "MineBlock"
 }
 
 func (s *BitcoinServer) Shutdown() error {
+	s.cancelFunc(errors.ErrServerStopping)
+	s.exiting = true
+
+	for i := 0; i < 4; i++ {
+		component := <-s.exitChan
+		log.Printf("%s exited", component)
+	}
+
 	if err := s.mempool.Save(s.cfg.DataDir); err != nil {
 		return err
 	}
@@ -207,7 +225,6 @@ func (s *BitcoinServer) Shutdown() error {
 		return err
 	}
 
-	s.exiting = true
 	return nil
 }
 

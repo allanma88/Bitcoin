@@ -27,6 +27,7 @@ var (
 	ErrBlockNoValidHash       = errors.New("no valid block hash")
 	ErrPrevBlockNotFound      = errors.New("prev block not found")
 	ErrBlockTooLate           = errors.New("block too late")
-	ErrServerCancelMining     = errors.New("the block is already mined")
+	ErrServerCancelMining     = errors.New("server cancel the mining")
+	ErrServerStopping         = errors.New("server stopping")
 	ErrAccountNotEnoughValues = errors.New("account not enough values")
 )

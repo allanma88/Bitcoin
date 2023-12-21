@@ -7,6 +7,7 @@ import (
 	"Bitcoin/src/infra"
 	"Bitcoin/src/model"
 	"bytes"
+	"context"
 	"log"
 )
 
@@ -26,9 +27,16 @@ func NewBlockService(blockDB database.IBlockDB) *BlockService {
 	}
 }
 
-func (service *BlockService) GetBlocks(lastBlockHash []byte, blockhashes [][]byte) ([]*model.Block, uint64, error) {
+func (service *BlockService) GetBlocks(lastBlockHash []byte, blockhashes [][]byte, ctxs []context.Context) ([]*model.Block, uint64, error) {
 	for _, blockHash := range blockhashes {
-		ancestors, err := service.Ancestors(lastBlockHash, blockHash)
+		for _, ctx := range ctxs {
+			err := context.Cause(ctx)
+			if err != nil {
+				return nil, 0, err
+			}
+		}
+
+		ancestors, err := service.ancestors(lastBlockHash, blockHash)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -42,21 +50,6 @@ func (service *BlockService) GetBlocks(lastBlockHash []byte, blockhashes [][]byt
 		}
 	}
 	return nil, 0, nil
-}
-
-// TODO: make internal
-func (service *BlockService) Ancestors(lastBlockHash, ancestor []byte) ([]*model.Block, error) {
-	ancestors := make([]*model.Block, 0)
-	for !bytes.Equal(ancestor, lastBlockHash) {
-		//TODO: split the GetBlock api to GetBlockHeader and GetBlockContent, not include body here
-		block, err := service.GetBlock(lastBlockHash, true)
-		if err != nil {
-			return nil, err
-		}
-		ancestors = append([]*model.Block{block}, ancestors...)
-		lastBlockHash = block.Prevhash
-	}
-	return nil, nil
 }
 
 func (service *BlockService) Validate(block *model.Block) error {
@@ -159,4 +152,18 @@ func validateRootHash(roothash []byte, tree *collection.MerkleTree[*model.Transa
 	}
 
 	return nil
+}
+
+func (service *BlockService) ancestors(lastBlockHash, ancestor []byte) ([]*model.Block, error) {
+	ancestors := make([]*model.Block, 0)
+	for !bytes.Equal(ancestor, lastBlockHash) {
+		//TODO: split the GetBlock api to GetBlockHeader and GetBlockContent, not include body here
+		block, err := service.GetBlock(lastBlockHash, true)
+		if err != nil {
+			return nil, err
+		}
+		ancestors = append([]*model.Block{block}, ancestors...)
+		lastBlockHash = block.Prevhash
+	}
+	return nil, nil
 }

@@ -105,7 +105,6 @@ func (s *ChainService) Save(dir string) error {
 		Utxo:   s.utxo,
 	}
 
-	// TODO: lock?
 	data, err := json.Marshal(snap)
 	if err != nil {
 		return err
