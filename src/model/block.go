@@ -171,7 +171,14 @@ func (block *Block) GetNextDifficulty(blocksPerDifficulty, expectBlockInterval u
 	difficulty := block.Difficulty
 	if block.Number%blocksPerDifficulty == 0 {
 		avgInterval := block.TotalInterval / (blocksPerDifficulty)
-		difficulty = block.Difficulty * float64((avgInterval / expectBlockInterval))
+		factor := float64((avgInterval / expectBlockInterval))
+		if factor > 4 {
+			factor = 4
+		}
+		if factor < 0.25 {
+			factor = 0.25
+		}
+		difficulty = block.Difficulty * factor
 	}
 
 	return difficulty

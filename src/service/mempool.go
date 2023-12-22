@@ -36,14 +36,18 @@ func (pool *MemPool) Put(tx *model.Transaction) {
 	}
 }
 
-func (pool *MemPool) TopMax(n int) []*model.Transaction {
-	return pool.mempool.TopMax(0, n)
+func (pool *MemPool) PopMax() *model.Transaction {
+	return pool.mempool.PopMax()
 }
 
 func (pool *MemPool) Remove(txs []*model.Transaction) {
 	for _, tx := range txs {
 		pool.mempool.Remove(string(tx.Hash), tx.Fee)
 	}
+}
+
+func (pool *MemPool) Len() int {
+	return pool.mempool.Len()
 }
 
 func (pool *MemPool) Load(dir string) error {

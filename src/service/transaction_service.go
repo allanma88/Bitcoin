@@ -10,22 +10,38 @@ import (
 
 type TransactionService struct {
 	database.IBlockDB
+	utxo map[string]uint64
 }
 
 type GetTxFunc func([]byte) *model.Transaction
 
-func NewTransactionService(db database.IBlockDB) *TransactionService {
+func NewTransactionService(db database.IBlockDB, utxo map[string]uint64) *TransactionService {
 	service := &TransactionService{
 		IBlockDB: db,
+		utxo:     utxo,
 	}
 	return service
 }
 
 // TODO: test cases
-func (service *TransactionService) ValidateOnChainTxs(txs []*model.Transaction, blockhash []byte, reward uint64) error {
-	totalFee, err := service.ValidateTxs(txs[1:], blockhash)
-	if err != nil {
-		return err
+func (service *TransactionService) ValidateOnChainTxs(txs []*model.Transaction, blockhash []byte, reward uint64, isMainChain bool) error {
+	txmap := make(map[string]*model.Transaction)
+	f := func(hash []byte) *model.Transaction {
+		return txmap[string(hash)]
+	}
+
+	var utxo map[string]uint64 = nil
+	if isMainChain {
+		utxo = service.utxo
+	}
+
+	var totalFee uint64 = 0
+	for _, tx := range txs {
+		if err := service.validateTx(tx, blockhash, false, utxo, f); err != nil {
+			return err
+		}
+		txmap[string(tx.Hash)] = tx
+		totalFee += tx.Fee
 	}
 
 	if err := service.validateCoinbase(txs[0], blockhash, totalFee+reward); err != nil {
@@ -34,31 +50,12 @@ func (service *TransactionService) ValidateOnChainTxs(txs []*model.Transaction, 
 	return nil
 }
 
-func (service *TransactionService) ValidateTxs(txs []*model.Transaction, blockhash []byte) (uint64, error) {
-	txmap := make(map[string]*model.Transaction)
-	for _, tx := range txs {
-		txmap[string(tx.Hash)] = tx
-	}
-	f := func(hash []byte) *model.Transaction {
-		return txmap[string(hash)]
-	}
-
-	var totalFee uint64 = 0
-	for _, tx := range txs {
-		if err := service.validateTx(tx, blockhash, false, f); err != nil {
-			return 0, err
-		}
-		totalFee += tx.Fee
-	}
-	return totalFee, nil
-}
-
 func (service *TransactionService) ValidateTx(tx *model.Transaction, f GetTxFunc) error {
-	return service.validateTx(tx, nil, false, f)
+	return service.validateTx(tx, nil, false, service.utxo, f)
 }
 
 func (service *TransactionService) validateCoinbase(tx *model.Transaction, blockhash []byte, val uint64) error {
-	if err := service.validateTx(tx, blockhash, true, nil); err != nil {
+	if err := service.validateTx(tx, blockhash, true, nil, nil); err != nil {
 		return err
 	}
 	if tx.InLen != 0 {
@@ -73,7 +70,7 @@ func (service *TransactionService) validateCoinbase(tx *model.Transaction, block
 	return nil
 }
 
-func (service *TransactionService) validateTx(tx *model.Transaction, blockhash []byte, coinbase bool, f GetTxFunc) error {
+func (service *TransactionService) validateTx(tx *model.Transaction, blockhash []byte, coinbase bool, utxo map[string]uint64, f GetTxFunc) error {
 	hash, err := validateHash[*model.Transaction](tx.Hash, tx)
 	if err != nil {
 		return err
@@ -97,7 +94,7 @@ func (service *TransactionService) validateTx(tx *model.Transaction, blockhash [
 	}
 
 	var totalInput uint64
-	totalInput, err = service.validateInputs(tx, coinbase, f)
+	totalInput, err = service.validateInputs(tx, coinbase, utxo, f)
 	if err != nil {
 		return err
 	}
@@ -115,7 +112,7 @@ func (service *TransactionService) validateTx(tx *model.Transaction, blockhash [
 	return nil
 }
 
-func (service *TransactionService) validateInputs(tx *model.Transaction, coinbase bool, f GetTxFunc) (uint64, error) {
+func (service *TransactionService) validateInputs(tx *model.Transaction, coinbase bool, utxo map[string]uint64, f GetTxFunc) (uint64, error) {
 	if len(tx.Ins) != int(tx.InLen) {
 		return 0, errors.ErrInLenMismatch
 	}
@@ -125,7 +122,7 @@ func (service *TransactionService) validateInputs(tx *model.Transaction, coinbas
 
 	var total uint64 = 0
 	for _, input := range tx.Ins {
-		val, err := service.validateInput(input, tx, f)
+		val, err := service.validateInput(input, tx, utxo, f)
 		if err != nil {
 			return 0, err
 		}
@@ -134,7 +131,7 @@ func (service *TransactionService) validateInputs(tx *model.Transaction, coinbas
 	return total, nil
 }
 
-func (service *TransactionService) validateInput(input *model.In, tx *model.Transaction, f GetTxFunc) (uint64, error) {
+func (service *TransactionService) validateInput(input *model.In, tx *model.Transaction, utxo map[string]uint64, f GetTxFunc) (uint64, error) {
 	prevTx, err := service.GetTx(input.PrevHash)
 	if err != nil {
 		return 0, err
@@ -153,6 +150,10 @@ func (service *TransactionService) validateInput(input *model.In, tx *model.Tran
 	}
 
 	input.PrevOut = prevTx.Outs[input.Index].DeepClone()
+
+	if utxo != nil && utxo[string(input.PrevOut.Pubkey)] < input.PrevOut.Value {
+		return 0, errors.ErrAccountNotEnoughValues
+	}
 
 	valid, err := cryptography.Verify(input.PrevOut.Pubkey, prevTx.Hash, input.Signature)
 	if !valid || err != nil {

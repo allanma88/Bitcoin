@@ -22,9 +22,9 @@ type ChainService struct {
 	lock   sync.Mutex
 }
 
-func NewChainService() *ChainService {
+func NewChainService(utxo map[string]uint64) *ChainService {
 	utxoService := &UtxoService{
-		utxo: make(map[string]uint64),
+		utxo: utxo,
 	}
 	return &ChainService{
 		UtxoService: utxoService,

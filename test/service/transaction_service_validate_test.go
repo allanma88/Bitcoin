@@ -64,7 +64,8 @@ func Test_Validate_Time_Too_Early(t *testing.T) {
 	formalizeTx(tx)
 
 	txdb := newBlockDB()
-	service := service.NewTransactionService(txdb)
+	utxo := make(map[string]uint64)
+	service := service.NewTransactionService(txdb, utxo)
 	err := service.ValidateTx(tx, nil)
 	if !errors.Is(err, bcerrors.ErrIdentityTooEarly) {
 		t.Fatalf("transaction validate failed, expect: %s, actual %s", bcerrors.ErrIdentityTooEarly, err)
@@ -80,7 +81,8 @@ func Test_Validate_Ins_Len_Mismatch(t *testing.T) {
 	formalizeTx(tx)
 
 	txdb := newBlockDB()
-	service := service.NewTransactionService(txdb)
+	utxo := make(map[string]uint64)
+	service := service.NewTransactionService(txdb, utxo)
 	err := service.ValidateTx(tx, nil)
 	if !errors.Is(err, bcerrors.ErrInLenMismatch) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrInLenMismatch, err)
@@ -91,7 +93,8 @@ func Test_Validate_Input_PrevTx_Not_Found(t *testing.T) {
 	_, tx := newTransactionPair(10, 8, time.Minute, nil, []byte{})
 
 	txdb := newBlockDB()
-	service := service.NewTransactionService(txdb)
+	utxo := make(map[string]uint64)
+	service := service.NewTransactionService(txdb, utxo)
 	err := service.ValidateTx(tx, func(hash []byte) *model.Transaction { return nil })
 	if !errors.Is(err, bcerrors.ErrPrevTxNotFound) {
 		t.Fatalf("transaction validate failed, expect: %s, actual: %s", bcerrors.ErrTxNotFound, err)
@@ -345,7 +348,8 @@ func formalizeTx(tx *model.Transaction) {
 }
 
 func newTransactionService(blockdb database.IBlockDB, txs ...*model.Transaction) *service.TransactionService {
-	service := service.NewTransactionService(blockdb)
+	utxo := make(map[string]uint64)
+	service := service.NewTransactionService(blockdb, utxo)
 	for _, tx := range txs {
 		err := service.SaveTx(tx)
 		if err != nil {
