@@ -42,11 +42,12 @@ type BitcoinServer struct {
 func NewBitcoinServer(cfg *config.Config, blockdb database.IBlockDB) (*BitcoinServer, error) {
 	ctx, cancelFunc := context.WithCancelCause(context.Background())
 
+	utxo := make(map[string]uint64)
 	server := &BitcoinServer{
 		cfg:                 cfg,
 		nodeService:         service.NewNodeService(cfg.Endpoint, cfg.Bootstraps),
-		chainService:        service.NewChainService(),
-		txService:           service.NewTransactionService(blockdb),
+		chainService:        service.NewChainService(utxo),
+		txService:           service.NewTransactionService(blockdb, utxo),
 		blockService:        service.NewBlockService(blockdb),
 		mempool:             service.NewMemPool(int(cfg.MaxTxSizePerBlock)),
 		txBroadcastQueue:    make(chan *model.Transaction, TxBroadcastQueueSize),
@@ -229,6 +230,10 @@ func (s *BitcoinServer) Shutdown() error {
 }
 
 func (s *BitcoinServer) load() error {
+	if err := s.blockService.TryAddGenesis(s.cfg.DataDir, s.cfg.InitDifficultyLevel); err != nil {
+		return err
+	}
+
 	if err := s.mempool.Load(s.cfg.DataDir); err != nil {
 		return err
 	}
@@ -268,12 +273,13 @@ func (s *BitcoinServer) addBlock(block *model.Block) error {
 	reward := block.GetNextReward(s.cfg.InitRewrad, s.cfg.BlocksPerRewrad)
 	txs := block.GetTxs()
 
-	if err = s.txService.ValidateOnChainTxs(txs, block.Hash, reward); err != nil {
+	isMainChain, err := s.applyBlock(block)
+	if err != nil {
+		log.Printf("apply block %x failed: %v", block.Hash, err)
 		return err
 	}
 
-	if err = s.applyBlock(block); err != nil {
-		log.Printf("apply block %x failed: %v", block.Hash, err)
+	if err = s.txService.ValidateOnChainTxs(txs, block.Hash, reward, isMainChain); err != nil {
 		return err
 	}
 
@@ -290,25 +296,22 @@ func (s *BitcoinServer) addBlock(block *model.Block) error {
 	return nil
 }
 
-func (s *BitcoinServer) applyBlock(block *model.Block) error {
+func (s *BitcoinServer) applyBlock(block *model.Block) (bool, error) {
 	applyChain, rollbackChain := s.chainService.ApplyChain(block)
 
 	if applyChain != nil && rollbackChain != nil {
 		applyBlocks, rollbackBlocks, err := s.blockService.GetBlocksOfChain(applyChain, rollbackChain)
 		if err != nil {
-			return err
+			return false, err
 		}
-		if err := s.chainService.SwitchBalances(rollbackBlocks, applyBlocks); err != nil {
-			return err
-		}
+		s.chainService.SwitchBlocks(rollbackBlocks, applyBlocks)
+		return false, nil
 	} else {
 		if s.cfg.Server != block.Miner {
 			s.cancelFunc(errors.ErrServerCancelMining)
 		}
 
-		if err := s.chainService.ApplyBalance(block); err != nil {
-			return err
-		}
+		s.chainService.ApplyBlock(block)
+		return true, nil
 	}
-	return nil
 }

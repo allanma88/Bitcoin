@@ -61,6 +61,28 @@ func (set *SortedSet[K, S, T]) Max() T {
 	return *new(T)
 }
 
+// TODO: test case
+func (set *SortedSet[K, S, T]) PopMax() T {
+	if set.length > 0 {
+		node := set.header
+		tail := set.tail
+		for i := len(set.tail.levels) - 1; i >= 0; i-- {
+			for ; node.levels[i].forward != tail; node = node.levels[i].forward {
+			}
+			node.levels[i].forward = tail
+			node.levels[i].span = 0
+
+			if set.header.levels[i].forward == nil {
+				set.maxLevel = i - 1
+			}
+		}
+		set.tail = tail.backward
+		set.length--
+		return tail.val
+	}
+	return *new(T)
+}
+
 func (set *SortedSet[K, S, T]) TopMax(m, n int) []T {
 	items := make([]T, 0, n-m)
 	node := set.header

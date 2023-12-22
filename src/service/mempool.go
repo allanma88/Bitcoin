@@ -4,13 +4,17 @@ import (
 	"Bitcoin/src/collection"
 	"Bitcoin/src/model"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 )
 
 const (
 	MEMPOOL = "mempool"
 )
+
+//TODO: test cases
 
 type MemPool struct {
 	maxTxSize int
@@ -36,8 +40,8 @@ func (pool *MemPool) Put(tx *model.Transaction) {
 	}
 }
 
-func (pool *MemPool) TopMax(n int) []*model.Transaction {
-	return pool.mempool.TopMax(0, n)
+func (pool *MemPool) PopMax() *model.Transaction {
+	return pool.mempool.PopMax()
 }
 
 func (pool *MemPool) Remove(txs []*model.Transaction) {
@@ -46,8 +50,15 @@ func (pool *MemPool) Remove(txs []*model.Transaction) {
 	}
 }
 
+func (pool *MemPool) Len() int {
+	return pool.mempool.Len()
+}
+
 func (pool *MemPool) Load(dir string) error {
 	data, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, MEMPOOL))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

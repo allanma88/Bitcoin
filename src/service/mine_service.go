@@ -71,11 +71,21 @@ func (s *MineService) mineBlock(lastBlock *model.Block, transactions []*model.Tr
 }
 
 func (s *MineService) fetchTxs(reward uint64) ([]*model.Transaction, error) {
-	txs := s.mempool.TopMax(int(s.cfg.MaxTxSizePerBlock))
+	txmap := make(map[string]*model.Transaction)
+	f := func(hash []byte) *model.Transaction {
+		return txmap[string(hash)]
+	}
 
-	totalFee, err := s.txService.ValidateTxs(txs, nil)
-	if err != nil {
-		return nil, err
+	var totalFee uint64 = 0
+	for len(txmap) < int(s.cfg.MaxTxSizePerBlock-1) && s.mempool.Len() > 0 {
+		tx := s.mempool.PopMax()
+		err := s.txService.ValidateTx(tx, f)
+
+		if err != nil {
+			return nil, err
+		}
+		totalFee += tx.Fee
+		txmap[string(tx.Hash)] = tx
 	}
 
 	coinbaseTx, err := model.MakeCoinbaseTx(s.cfg.MinerPubkey, reward+totalFee)
@@ -83,6 +93,10 @@ func (s *MineService) fetchTxs(reward uint64) ([]*model.Transaction, error) {
 		return nil, err
 	}
 
-	txs = append([]*model.Transaction{coinbaseTx}, txs...)
+	txs := make([]*model.Transaction, 0, s.cfg.MaxTxSizePerBlock)
+	txs = append(txs, coinbaseTx)
+	for _, tx := range txmap {
+		txs = append(txs, tx)
+	}
 	return txs, nil
 }
