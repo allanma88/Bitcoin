@@ -103,6 +103,10 @@ func (db *TestBaseDB) Filter(prefix, start []byte) ([][]byte, error) {
 	return nil, errors.New("not implemented")
 }
 
+func (db *TestBaseDB) Size(prefix []byte) (int64, error) {
+	return 0, errors.New("not implemented")
+}
+
 func (db *TestBaseDB) StartBatch() database.IBatch {
 	return nil
 }

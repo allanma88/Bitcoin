@@ -19,6 +19,7 @@ type IBlockDB interface {
 	SaveBlock(block *model.Block) error
 	GetBlock(hash []byte, includeBody bool) (*model.Block, error)
 	FilterBlock(prevBlockHash []byte) ([]*model.Block, error)
+	Size() (int64, error)
 	SaveTx(tx *model.Transaction) error
 	GetTx(hash []byte) (*model.Transaction, error)
 	Close() error
@@ -103,6 +104,10 @@ func (db *BlockDB) FilterBlock(prevBlockHash []byte) ([]*model.Block, error) {
 	}
 
 	return blocks, nil
+}
+
+func (db *BlockDB) Size() (int64, error) {
+	return db.IBaseDB.Size([]byte(BlockTable))
 }
 
 func (db *BlockDB) SaveTx(tx *model.Transaction) error {

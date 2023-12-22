@@ -4,7 +4,9 @@ import (
 	"Bitcoin/src/collection"
 	"Bitcoin/src/model"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sync"
 )
@@ -83,6 +85,9 @@ type snapshot struct {
 
 func (s *ChainService) Load(dir string) ([]*model.Chain, error) {
 	data, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, Stat))
+	if errors.Is(err, fs.ErrNotExist) {
+		return []*model.Chain{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -195,3 +195,39 @@ func (block *Block) GetNextTotalInterval(t time.Time, blocksPerDifficulty uint64
 		return block.TotalInterval + uint64(t.Sub(block.Time).Milliseconds())
 	}
 }
+
+func MakeGenesisBlock(outs []*Out, level uint64) (*Block, error) {
+	now := time.Now().UTC()
+
+	tx := &Transaction{
+		OutLen:    uint32(len(outs)),
+		Outs:      outs,
+		Timestamp: now,
+	}
+	txHash, err := tx.ComputeHash()
+	if err != nil {
+		return nil, err
+	}
+	tx.Hash = txHash
+
+	tree, err := collection.BuildTree[*Transaction]([]*Transaction{tx})
+	if err != nil {
+		return nil, err
+	}
+
+	block := &Block{
+		Number:     1,
+		RootHash:   tree.Table[len(tree.Table)-1][0].Hash,
+		Difficulty: infra.ComputeDifficulty(infra.MakeDifficulty(level)),
+		Time:       now,
+		Body:       tree,
+	}
+
+	hash, err := block.FindHash(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	block.Hash = hash
+
+	return block, nil
+}

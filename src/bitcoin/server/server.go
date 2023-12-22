@@ -230,6 +230,10 @@ func (s *BitcoinServer) Shutdown() error {
 }
 
 func (s *BitcoinServer) load() error {
+	if err := s.blockService.TryAddGenesis(s.cfg.DataDir, s.cfg.InitDifficultyLevel); err != nil {
+		return err
+	}
+
 	if err := s.mempool.Load(s.cfg.DataDir); err != nil {
 		return err
 	}

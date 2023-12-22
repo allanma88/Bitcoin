@@ -8,11 +8,15 @@ import (
 	"Bitcoin/src/model"
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
+	"os"
 )
 
 const (
 	MaxBlocksPerGetBlockReq = 100
+	Genesis                 = "Genesis"
 )
 
 //TODO: more test cases
@@ -27,9 +31,9 @@ func NewBlockService(blockDB database.IBlockDB) *BlockService {
 	}
 }
 
-func (service *BlockService) GetBlocks(lastBlockHash []byte, blockhashes [][]byte, ctxs []context.Context) ([]*model.Block, uint64, error) {
+func (s *BlockService) GetBlocks(lastBlockHash []byte, blockhashes [][]byte, ctxs []context.Context) ([]*model.Block, uint64, error) {
 	for _, blockHash := range blockhashes {
-		ancestors, err := service.ancestors(lastBlockHash, blockHash, ctxs)
+		ancestors, err := s.ancestors(lastBlockHash, blockHash, ctxs)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -45,7 +49,7 @@ func (service *BlockService) GetBlocks(lastBlockHash []byte, blockhashes [][]byt
 	return nil, 0, nil
 }
 
-func (service *BlockService) Validate(block *model.Block) error {
+func (s *BlockService) Validate(block *model.Block) error {
 	hash, err := validateHash[*model.Block](block.Hash, block)
 	if err != nil {
 		return err
@@ -56,7 +60,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return err
 	}
 
-	existBlock, err := service.GetBlock(hash, false)
+	existBlock, err := s.GetBlock(hash, false)
 	if err != nil {
 		return err
 	}
@@ -64,7 +68,7 @@ func (service *BlockService) Validate(block *model.Block) error {
 		return errors.ErrBlockExist
 	}
 
-	prevBlock, err := service.GetBlock(block.Prevhash, false)
+	prevBlock, err := s.GetBlock(block.Prevhash, false)
 	if err != nil {
 		return err
 	}
@@ -91,15 +95,15 @@ func (service *BlockService) Validate(block *model.Block) error {
 	return nil
 }
 
-func (service *BlockService) GetBlocksOfChain(applyChain, rollbackChain *model.Chain) ([]*model.Block, []*model.Block, error) {
+func (s *BlockService) GetBlocksOfChain(applyChain, rollbackChain *model.Chain) ([]*model.Block, []*model.Block, error) {
 	applyBlocks := make([]*model.Block, 0)
 	rollbackBlocks := make([]*model.Block, 0)
 
-	applyBlock, err := service.GetBlock(applyChain.LastBlockHash, true)
+	applyBlock, err := s.GetBlock(applyChain.LastBlockHash, true)
 	if err != nil {
 		return nil, nil, err
 	}
-	rollbackBlock, err := service.GetBlock(rollbackChain.LastBlockHash, true)
+	rollbackBlock, err := s.GetBlock(rollbackChain.LastBlockHash, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -108,16 +112,46 @@ func (service *BlockService) GetBlocksOfChain(applyChain, rollbackChain *model.C
 		rollbackBlocks = append(rollbackBlocks, rollbackBlock)
 		applyBlocks = append(applyBlocks, applyBlock)
 
-		applyBlock, err = service.GetBlock(applyBlock.Prevhash, true)
+		applyBlock, err = s.GetBlock(applyBlock.Prevhash, true)
 		if err != nil {
 			return nil, nil, err
 		}
-		rollbackBlock, err = service.GetBlock(rollbackBlock.Prevhash, true)
+		rollbackBlock, err = s.GetBlock(rollbackBlock.Prevhash, true)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 	return applyBlocks, rollbackBlocks, nil
+}
+
+func (s *BlockService) TryAddGenesis(dir string, level uint64) error {
+	size, err := s.Size()
+	if err != nil {
+		return err
+	}
+
+	if size == 0 {
+		data, err := os.ReadFile(fmt.Sprintf("%s/%s", dir, Genesis))
+		if err != nil {
+			return err
+		}
+
+		var outs []*model.Out
+		if err := json.Unmarshal(data, &outs); err != nil {
+			return err
+		}
+
+		block, err := model.MakeGenesisBlock(outs, level)
+		if err != nil {
+			return err
+		}
+
+		if err = s.SaveBlock(block); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func validateDifficulty(hash []byte, difficulty float64) error {
@@ -147,7 +181,7 @@ func validateRootHash(roothash []byte, tree *collection.MerkleTree[*model.Transa
 	return nil
 }
 
-func (service *BlockService) ancestors(lastBlockHash, ancestor []byte, ctxs []context.Context) ([]*model.Block, error) {
+func (s *BlockService) ancestors(lastBlockHash, ancestor []byte, ctxs []context.Context) ([]*model.Block, error) {
 	ancestors := make([]*model.Block, 0)
 	for !bytes.Equal(ancestor, lastBlockHash) {
 		for _, ctx := range ctxs {
@@ -158,7 +192,7 @@ func (service *BlockService) ancestors(lastBlockHash, ancestor []byte, ctxs []co
 		}
 
 		//TODO: split the GetBlock api to GetBlockHeader and GetBlockContent, not include body here
-		block, err := service.GetBlock(lastBlockHash, true)
+		block, err := s.GetBlock(lastBlockHash, true)
 		if err != nil {
 			return nil, err
 		}

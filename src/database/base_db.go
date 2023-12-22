@@ -13,6 +13,7 @@ type IBaseDB interface {
 	Save(prefix []byte, key, val any) error
 	Get(prefix, key []byte, val any) (bool, error)
 	Filter(prefix, start []byte) ([][]byte, error)
+	Size(prefix []byte) (int64, error)
 	StartBatch() IBatch
 	EndBatch(batch IBatch) error
 	Close() error
@@ -65,6 +66,14 @@ func (db *BaseDB) Filter(prefix, start []byte) ([][]byte, error) {
 	iter.Release()
 
 	return vals, nil
+}
+
+func (db *BaseDB) Size(prefix []byte) (int64, error) {
+	sizes, err := db.Database.SizeOf([]util.Range{*util.BytesPrefix(prefix)})
+	if err != nil {
+		return 0, err
+	}
+	return sizes[0], nil
 }
 
 func (db *BaseDB) StartBatch() IBatch {
